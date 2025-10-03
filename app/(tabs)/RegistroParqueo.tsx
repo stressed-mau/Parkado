@@ -1,133 +1,209 @@
-import React from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+import MapView, { Marker } from 'react-native-maps';
+import { AntDesign, Feather } from '@expo/vector-icons';
 
-// Definición de la paleta de colores para referencia:
-// F6EEE4 - Fondo (Piel claro)
-// FD721D - Botón Primario (Naranja fuerte)
-// F2BD2B - Botones Secundarios/Highlight (Amarillo)
-// B2A83F - Etiquetas (Verde Oliva)
-// 7BB3CD - Encabezado/Íconos (Azul claro)
+// Interfaz para la imagen seleccionada
+interface SelectedImage {
+  uri: string | null;
+}
 
 const RegistroParqueo: React.FC = () => {
+  // Estados para imágenes
+  const [licenciaImage, setLicenciaImage] = useState<SelectedImage>({ uri: null });
+  const [fotoReferencia, setFotoReferencia] = useState<SelectedImage>({ uri: null });
+
+  // Estados para ubicación
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Obtener ubicación al montar
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setErrorMsg('Permiso denegado para acceder a la ubicación.');
+        return;
+      }
+
+      let currentLocation = await Location.getCurrentPositionAsync({});
+      setLocation({
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      });
+    })();
+  }, []);
+
+  // Función genérica para seleccionar imagen
+  const pickImage = async (setImage: React.Dispatch<React.SetStateAction<SelectedImage>>) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permiso Requerido', 'Necesitamos acceso a la galería para seleccionar archivos.');
+      return;
+    }
+
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setImage({ uri: result.assets[0].uri });
+    }
+  };
+
+  // Función para abrir el selector de hora (simulado)
+  const handleTimePicker = (field: string) => {
+    Alert.alert('Selector de Hora', `Abriendo selector para ${field}.`);
+  };
+
+  // Render vista previa imagen o placeholder
+  const renderImagePreview = (imageState: SelectedImage) => {
+    if (imageState.uri) {
+      return <Image source={{ uri: imageState.uri }} style={styles.imagePreview} />;
+    }
+    return (
+      <View style={styles.imagePlaceholder}>
+        <Feather name="image" size={40} color="#7BB3CD" />
+      </View>
+    );
+  };
+
+  // Botón de basurero
+  const renderTrashButton = (setImage: React.Dispatch<React.SetStateAction<SelectedImage>>) => (
+    <TouchableOpacity onPress={() => setImage({ uri: null })} style={styles.trashIcon}>
+      <Feather name="trash" size={24} color="#B2A83F" />
+    </TouchableOpacity>
+  );
+
   return (
     <ScrollView contentContainerStyle={styles.scrollContainer} style={styles.container}>
       <View style={styles.header}>
-        {/* Usamos el azul claro para el título */}
         <Text style={styles.headerText}>REGISTRO DEL ESTACIONAMIENTO</Text>
       </View>
 
       <View style={styles.formSection}>
-        {/* Campo: Nombre del estacionamiento */}
+        {/* Campo: Nombre */}
         <View style={styles.inputGroup}>
-          {/* Usamos el verde oliva para las etiquetas */}
           <Text style={styles.label}>NOMBRE DEL ESTACIONAMIENTO*</Text>
           <TextInput style={styles.input} placeholder="NOMBRE DEL ESTACIONAMIENTO" />
         </View>
 
-        {/* Campo: Dirección */}
+        {/* Campo: Dirección con Mapa */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>DIRECCION*</Text>
-          <View style={styles.locationInputContainer}>
-            <TextInput style={styles.input} placeholder="DIRECCION" />
-            <TouchableOpacity style={styles.locationIcon}>
-              {/* Ícono de ubicación con color de destaque */}
-              <Text style={{ fontSize: 24, color: '#7BB3CD' }}>📍</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.label}>DIRECCIÓN*</Text>
+
+          {location ? (
+            <>
+              <MapView
+                style={styles.map}
+                region={{
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+              >
+                <Marker
+                  coordinate={location}
+                  draggable
+                  onDragEnd={(e) => {
+                    setLocation({
+                      latitude: e.nativeEvent.coordinate.latitude,
+                      longitude: e.nativeEvent.coordinate.longitude,
+                    });
+                  }}
+                  title="Mi ubicación"
+                />
+              </MapView>
+              <Text style={styles.coordsText}>
+                Lat: {location.latitude.toFixed(6)} | Lng: {location.longitude.toFixed(6)}
+              </Text>
+            </>
+          ) : (
+            <Text>{errorMsg ? errorMsg : 'Obteniendo ubicación...'}</Text>
+          )}
         </View>
 
-        {/* Campo: Teléfono */}
+        {/* Teléfono */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>TELEFONO*</Text>
           <TextInput style={styles.input} placeholder="TELEFONO" keyboardType="phone-pad" />
         </View>
 
-        {/* Campo: Capacidad de autos */}
+        {/* Capacidad */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>CAPACIDAD TOTAL DE AUTOS*</Text>
           <TextInput style={styles.input} placeholder="CAPACIDAD TOTAL DE AUTOS" keyboardType="numeric" />
         </View>
-
-        {/* Campo: Capacidad de motos */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>CAPACIDAD TOTAL DE MOTOS*</Text>
           <TextInput style={styles.input} placeholder="CAPACIDAD TOTAL DE MOTOS" keyboardType="numeric" />
         </View>
 
-        {/* Horario de apertura (ejemplo con Texto y un Ícono de Reloj en lugar de Switch) */}
+        {/* Horarios */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>HORARIO DE APERTURA*</Text>
-          <View style={styles.timeRow}>
+          <TouchableOpacity onPress={() => handleTimePicker('apertura')} style={styles.timeRow}>
             <Text style={styles.placeholderText}>SELECCIONAR HORA</Text>
-            <Text style={{ fontSize: 20, color: '#7BB3CD' }}>🕒</Text>
-          </View>
+            <AntDesign name="clockcircleo" size={20} color="#7BB3CD" />
+          </TouchableOpacity>
         </View>
 
-        {/* Horario de cierre */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>HORARIO DE CIERRE*</Text>
-          <View style={styles.timeRow}>
+          <TouchableOpacity onPress={() => handleTimePicker('cierre')} style={styles.timeRow}>
             <Text style={styles.placeholderText}>SELECCIONAR HORA</Text>
-            <Text style={{ fontSize: 20, color: '#7BB3CD' }}>🕒</Text>
-          </View>
+            <AntDesign name="clockcircleo" size={20} color="#7BB3CD" />
+          </TouchableOpacity>
         </View>
 
-        {/* Campo: Tarifa de autos */}
+        {/* Tarifas */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>TARIFA DE AUTOS*</Text>
           <TextInput style={styles.input} placeholder="TARIFA DE AUTOS" keyboardType="numeric" />
         </View>
-
-        {/* Campo: Tarifa de motos */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>TARIFA DE MOTOS*</Text>
           <TextInput style={styles.input} placeholder="TARIFA DE MOTOS" keyboardType="numeric" />
         </View>
 
-        {/* Campo: NIT */}
+        {/* NIT */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>NIT*</Text>
           <TextInput style={styles.input} placeholder="NIT" />
         </View>
 
-        {/* Botón para Licencia de funcionamiento */}
+        {/* Licencia */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>LICENCIA DE FUNCIONAMIENTO*</Text>
           <View style={styles.fileRow}>
-            {/* Usamos el amarillo para el botón secundario de archivo */}
-            <TouchableOpacity style={styles.fileButton}>
+            <TouchableOpacity onPress={() => pickImage(setLicenciaImage)} style={styles.fileButton}>
               <Text style={styles.fileButtonText}>SELECCIONAR ARCHIVO</Text>
             </TouchableOpacity>
-            <TouchableOpacity>
-               {/* Ícono de basurero para eliminar archivo */}
-              <Text style={{ fontSize: 24, color: '#B2A83F' }}>🗑️</Text>
-            </TouchableOpacity>
+            {renderTrashButton(setLicenciaImage)}
           </View>
-          <View style={styles.imagePlaceholder}>
-             <Text style={{ fontSize: 40, color: '#7BB3CD' }}>🖼️</Text>
-          </View>
+          {renderImagePreview(licenciaImage)}
         </View>
 
-        {/* Botón para Foto de referencia */}
+        {/* Foto de referencia */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>FOTO DE REFERENCIA</Text>
-           <View style={styles.fileRow}>
-             {/* Usamos el amarillo para el botón secundario de archivo */}
-            <TouchableOpacity style={styles.fileButton}>
+          <View style={styles.fileRow}>
+            <TouchableOpacity onPress={() => pickImage(setFotoReferencia)} style={styles.fileButton}>
               <Text style={styles.fileButtonText}>SELECCIONAR ARCHIVO</Text>
             </TouchableOpacity>
-            <TouchableOpacity>
-               {/* Ícono de basurero para eliminar archivo */}
-              <Text style={{ fontSize: 24, color: '#B2A83F' }}>🗑️</Text>
-            </TouchableOpacity>
+            {renderTrashButton(setFotoReferencia)}
           </View>
-          <View style={styles.imagePlaceholder}>
-             <Text style={{ fontSize: 40, color: '#7BB3CD' }}>🖼️</Text>
-          </View>
+          {renderImagePreview(fotoReferencia)}
         </View>
       </View>
 
-      {/* Botón de REGISTRAR - Acción principal con color naranja vibrante */}
+      {/* Botón Registrar */}
       <TouchableOpacity style={styles.registerButton}>
         <Text style={styles.registerButtonText}>REGISTRAR</Text>
       </TouchableOpacity>
@@ -136,21 +212,19 @@ const RegistroParqueo: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  // F6EEE4: Fondo
   container: {
     flex: 1,
     backgroundColor: '#F6EEE4',
   },
   scrollContainer: {
-    paddingBottom: 40, // Espacio al final de la scroll view
+    paddingBottom: 40,
   },
   header: {
     padding: 20,
     alignItems: 'center',
-    paddingTop: 50, // Ajuste para dar espacio bajo la barra de estado
+    paddingTop: 50,
     marginBottom: 10,
   },
-  // 7BB3CD: Azul claro para el encabezado
   headerText: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -162,7 +236,6 @@ const styles = StyleSheet.create({
   inputGroup: {
     marginBottom: 15,
   },
-  // B2A83F: Verde oliva para las etiquetas
   label: {
     fontSize: 12,
     color: '#B2A83F',
@@ -175,17 +248,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ccc',
     paddingVertical: 5,
     fontSize: 14,
+    flex: 1,
   },
-  locationInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-  },
-  locationIcon: {
-    padding: 10,
-  },
-  // Fila para Horario/Tarifas con línea divisoria
   timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -193,22 +257,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#ccc',
     paddingVertical: 10,
-  },
-  fileRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    paddingRight: 10,
   },
   placeholderText: {
     color: '#aaa',
     fontSize: 14,
   },
-  // F2BD2B: Amarillo para el botón de archivo
+  fileRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
   fileButton: {
     backgroundColor: '#F2BD2B',
     padding: 10,
     borderRadius: 5,
-    width: '75%', // Ocupa la mayor parte del espacio en la fila
+    flex: 1,
     alignItems: 'center',
   },
   fileButtonText: {
@@ -216,17 +281,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
+  trashIcon: {
+    padding: 10,
+  },
   imagePlaceholder: {
     backgroundColor: '#fff',
-    height: 100,
+    height: 120,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 15,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#ccc',
+    overflow: 'hidden',
   },
-  // FD721D: Naranja para el botón principal
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
   registerButton: {
     backgroundColor: '#FD721D',
     paddingVertical: 15,
@@ -235,7 +308,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
     marginBottom: 20,
-    shadowColor: '#FD721D', // Sombra para que destaque
+    shadowColor: '#FD721D',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
@@ -245,6 +318,20 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  // Estilos del mapa y coordenadas
+  map: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  coordsText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 

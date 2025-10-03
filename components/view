@@ -1,0 +1,3 @@
+<View style={{ backgroundColor: '#F6EEE4', flex: 1 }}>
+  {/* Tus otros componentes aquí */}
+</View>

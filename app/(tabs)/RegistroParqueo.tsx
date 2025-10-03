@@ -1,25 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Image, Alert, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
-import { AntDesign, Feather } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
-// Interfaz para la imagen seleccionada
 interface SelectedImage {
   uri: string | null;
 }
 
 const RegistroParqueo: React.FC = () => {
-  // Estados para imágenes
+  // Estados de imágenes
   const [licenciaImage, setLicenciaImage] = useState<SelectedImage>({ uri: null });
   const [fotoReferencia, setFotoReferencia] = useState<SelectedImage>({ uri: null });
 
-  // Estados para ubicación
+  // Estados de ubicación
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Obtener ubicación al montar
+  // Estados de horarios
+  const [horaApertura, setHoraApertura] = useState<Date | null>(null);
+  const [horaCierre, setHoraCierre] = useState<Date | null>(null);
+  const [showPicker, setShowPicker] = useState<{ field: 'apertura' | 'cierre' | null }>({ field: null });
+
+  // Solicitar ubicación
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -36,7 +41,7 @@ const RegistroParqueo: React.FC = () => {
     })();
   }, []);
 
-  // Función genérica para seleccionar imagen
+  // Selección de imagen
   const pickImage = async (setImage: React.Dispatch<React.SetStateAction<SelectedImage>>) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -56,12 +61,7 @@ const RegistroParqueo: React.FC = () => {
     }
   };
 
-  // Función para abrir el selector de hora (simulado)
-  const handleTimePicker = (field: string) => {
-    Alert.alert('Selector de Hora', `Abriendo selector para ${field}.`);
-  };
-
-  // Render vista previa imagen o placeholder
+  // Render de imagen o placeholder
   const renderImagePreview = (imageState: SelectedImage) => {
     if (imageState.uri) {
       return <Image source={{ uri: imageState.uri }} style={styles.imagePreview} />;
@@ -73,7 +73,6 @@ const RegistroParqueo: React.FC = () => {
     );
   };
 
-  // Botón de basurero
   const renderTrashButton = (setImage: React.Dispatch<React.SetStateAction<SelectedImage>>) => (
     <TouchableOpacity onPress={() => setImage({ uri: null })} style={styles.trashIcon}>
       <Feather name="trash" size={24} color="#B2A83F" />
@@ -87,13 +86,13 @@ const RegistroParqueo: React.FC = () => {
       </View>
 
       <View style={styles.formSection}>
-        {/* Campo: Nombre */}
+        {/* Nombre */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>NOMBRE DEL ESTACIONAMIENTO*</Text>
           <TextInput style={styles.input} placeholder="NOMBRE DEL ESTACIONAMIENTO" />
         </View>
 
-        {/* Campo: Dirección con Mapa */}
+        {/* Dirección con Mapa */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>DIRECCIÓN*</Text>
 
@@ -135,7 +134,7 @@ const RegistroParqueo: React.FC = () => {
           <TextInput style={styles.input} placeholder="TELEFONO" keyboardType="phone-pad" />
         </View>
 
-        {/* Capacidad */}
+        {/* Capacidades */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>CAPACIDAD TOTAL DE AUTOS*</Text>
           <TextInput style={styles.input} placeholder="CAPACIDAD TOTAL DE AUTOS" keyboardType="numeric" />
@@ -145,22 +144,48 @@ const RegistroParqueo: React.FC = () => {
           <TextInput style={styles.input} placeholder="CAPACIDAD TOTAL DE MOTOS" keyboardType="numeric" />
         </View>
 
-        {/* Horarios */}
+        {/* Horario Apertura */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>HORARIO DE APERTURA*</Text>
-          <TouchableOpacity onPress={() => handleTimePicker('apertura')} style={styles.timeRow}>
-            <Text style={styles.placeholderText}>SELECCIONAR HORA</Text>
-            <AntDesign name="clockcircleo" size={20} color="#7BB3CD" />
+          <TouchableOpacity onPress={() => setShowPicker({ field: 'apertura' })} style={styles.timeRow}>
+            <Feather name="clock" size={20} color="#7BB3CD" style={{ marginRight: 8 }} />
+            <Text style={styles.placeholderText}>
+              {horaApertura ? horaApertura.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'SELECCIONAR HORA'}
+            </Text>
           </TouchableOpacity>
         </View>
 
+        {/* Horario Cierre */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>HORARIO DE CIERRE*</Text>
-          <TouchableOpacity onPress={() => handleTimePicker('cierre')} style={styles.timeRow}>
-            <Text style={styles.placeholderText}>SELECCIONAR HORA</Text>
-            <AntDesign name="clockcircleo" size={20} color="#7BB3CD" />
+          <TouchableOpacity onPress={() => setShowPicker({ field: 'cierre' })} style={styles.timeRow}>
+            <Feather name="clock" size={20} color="#7BB3CD" style={{ marginRight: 8 }} />
+            <Text style={styles.placeholderText}>
+              {horaCierre ? horaCierre.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'SELECCIONAR HORA'}
+            </Text>
           </TouchableOpacity>
         </View>
+
+        {/* DateTimePicker */}
+        {showPicker.field && (
+          <DateTimePicker
+            value={new Date()}
+            mode="time"
+            is24Hour={true}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event, selectedDate) => {
+              if (event.type === 'dismissed') {
+                setShowPicker({ field: null });
+                return;
+              }
+              if (selectedDate) {
+                if (showPicker.field === 'apertura') setHoraApertura(selectedDate);
+                if (showPicker.field === 'cierre') setHoraCierre(selectedDate);
+              }
+              if (Platform.OS !== 'ios') setShowPicker({ field: null });
+            }}
+          />
+        )}
 
         {/* Tarifas */}
         <View style={styles.inputGroup}>
@@ -212,127 +237,26 @@ const RegistroParqueo: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F6EEE4',
-  },
-  scrollContainer: {
-    paddingBottom: 40,
-  },
-  header: {
-    padding: 20,
-    alignItems: 'center',
-    paddingTop: 50,
-    marginBottom: 10,
-  },
-  headerText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#7BB3CD',
-  },
-  formSection: {
-    paddingHorizontal: 20,
-  },
-  inputGroup: {
-    marginBottom: 15,
-  },
-  label: {
-    fontSize: 12,
-    color: '#B2A83F',
-    marginBottom: 5,
-    fontWeight: 'bold',
-  },
-  input: {
-    backgroundColor: 'transparent',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    paddingVertical: 5,
-    fontSize: 14,
-    flex: 1,
-  },
-  timeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    paddingVertical: 10,
-    paddingRight: 10,
-  },
-  placeholderText: {
-    color: '#aaa',
-    fontSize: 14,
-  },
-  fileRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-  },
-  fileButton: {
-    backgroundColor: '#F2BD2B',
-    padding: 10,
-    borderRadius: 5,
-    flex: 1,
-    alignItems: 'center',
-  },
-  fileButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  trashIcon: {
-    padding: 10,
-  },
-  imagePlaceholder: {
-    backgroundColor: '#fff',
-    height: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 15,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    overflow: 'hidden',
-  },
-  imagePreview: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
-  },
-  registerButton: {
-    backgroundColor: '#FD721D',
-    paddingVertical: 15,
-    marginHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 20,
-    shadowColor: '#FD721D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
-  },
-  registerButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  // Estilos del mapa y coordenadas
-  map: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    marginTop: 10,
-  },
-  coordsText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '600',
-    textAlign: 'center',
-  },
+  container: { flex: 1, backgroundColor: '#F6EEE4' },
+  scrollContainer: { paddingBottom: 40 },
+  header: { padding: 20, alignItems: 'center', paddingTop: 50, marginBottom: 10 },
+  headerText: { fontSize: 18, fontWeight: 'bold', color: '#7BB3CD' },
+  formSection: { paddingHorizontal: 20 },
+  inputGroup: { marginBottom: 15 },
+  label: { fontSize: 12, color: '#B2A83F', marginBottom: 5, fontWeight: 'bold' },
+  input: { backgroundColor: 'transparent', borderBottomWidth: 1, borderBottomColor: '#ccc', paddingVertical: 5, fontSize: 14, flex: 1 },
+  timeRow: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#ccc', paddingVertical: 10 },
+  placeholderText: { color: '#aaa', fontSize: 14 },
+  fileRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  fileButton: { backgroundColor: '#F2BD2B', padding: 10, borderRadius: 5, flex: 1, alignItems: 'center' },
+  fileButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  trashIcon: { padding: 10 },
+  imagePlaceholder: { backgroundColor: '#fff', height: 120, justifyContent: 'center', alignItems: 'center', marginTop: 15, borderRadius: 8, borderWidth: 1, borderColor: '#ccc', overflow: 'hidden' },
+  imagePreview: { width: '100%', height: '100%', borderRadius: 8 },
+  registerButton: { backgroundColor: '#FD721D', paddingVertical: 15, marginHorizontal: 20, borderRadius: 8, alignItems: 'center', marginTop: 20, marginBottom: 20, shadowColor: '#FD721D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 8 },
+  registerButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  map: { width: '100%', height: 200, borderRadius: 8, marginTop: 10 },
+  coordsText: { marginTop: 8, fontSize: 14, color: '#333', fontWeight: '600', textAlign: 'center' },
 });
 
 export default RegistroParqueo;

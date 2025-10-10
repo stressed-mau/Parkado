@@ -1,24 +1,48 @@
+import { MaterialIcons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
-import React, { useState } from "react";
+import * as Location from "expo-location";
+import React, { useEffect, useState } from "react";
 import { Image, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import MapView, { MapPressEvent, Marker } from "react-native-maps";
 import { Button } from "react-native-paper";
+import Logo from "../../assets/Logo";
 
 export default function RegistroEstacionamiento() {
   const [form, setForm] = useState({
     nombre: "",
-    direccion: "",
     telefono: "",
     capacidadAutos: "",
     capacidadMotos: "",
-    apertura: "",
-    cierre: "",
     tarifaAutos: "",
     tarifaMotos: "",
     nit: "",
+    latitud: "",
+    longitud: "",
+    apertura: "",
+    cierre: "",
   });
 
   const [licenciaUri, setLicenciaUri] = useState<string | null>(null);
   const [fotoUri, setFotoUri] = useState<string | null>(null);
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // Estados para el selector de hora
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerType, setPickerType] = useState<"apertura" | "cierre" | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const loc = await Location.getCurrentPositionAsync({});
+        setLocation({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+      }
+    })();
+  }, []);
 
   const pickImage = async (setUri: (uri: string) => void) => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -34,23 +58,42 @@ export default function RegistroEstacionamiento() {
     setForm({ ...form, [key]: value });
   };
 
+  const handleMapPress = (event: MapPressEvent) => {
+    const { latitude, longitude } = event.nativeEvent.coordinate;
+    setForm({ ...form, latitud: String(latitude), longitud: String(longitude) });
+    setLocation({ latitude, longitude });
+  };
+
+  const handleTimeChange = (event: any, selectedDate?: Date) => {
+    if (selectedDate && pickerType) {
+      const hours = selectedDate.getHours().toString().padStart(2, "0");
+      const minutes = selectedDate.getMinutes().toString().padStart(2, "0");
+      const formattedTime = `${hours}:${minutes}`;
+      setForm({ ...form, [pickerType]: formattedTime });
+    }
+    setShowPicker(false);
+    setPickerType(null);
+  };
+
   const handleSubmit = () => {
     console.log("Datos del estacionamiento:", form);
-    console.log("Licencia:", licenciaUri);
-    console.log("Foto:", fotoUri);
     alert("Registro enviado ✅");
   };
 
   return (
-    <ScrollView className="flex-1 bg-white px-5 py-4">
-      <Text className="text-xl font-bold mb-4 text-center">
+    <ScrollView className="flex-1 px-5 py-4" style={{ backgroundColor: "#F6EEE4" }}>
+      <Logo />
+
+      <Text
+        className="text-2xl font-bold mt-4 mb-4 text-center"
+        style={{ color: "#F2BD2B" }}
+      >
         REGISTRO DEL ESTACIONAMIENTO
       </Text>
 
-      {/* Campos de texto */}
+      {/* Campos principales */}
       {[
         ["nombre", "Nombre del estacionamiento*"],
-        ["direccion", "Dirección*"],
         ["telefono", "Teléfono*"],
         ["capacidadAutos", "Capacidad total de autos*"],
         ["capacidadMotos", "Capacidad total de motos*"],
@@ -59,9 +102,16 @@ export default function RegistroEstacionamiento() {
         ["nit", "NIT*"],
       ].map(([key, label]) => (
         <View key={key} className="mb-4">
-          <Text className="text-gray-700 mb-1">{label}</Text>
+          <Text className="mb-1 font-medium" style={{ color: "#B2A83F" }}>
+            {label}
+          </Text>
           <TextInput
-            className="border border-gray-300 rounded-lg px-3 py-2"
+            className="rounded-lg px-3 py-2"
+            style={{
+              borderColor: "#7BB3CD",
+              borderWidth: 1,
+              backgroundColor: "white",
+            }}
             value={form[key as keyof typeof form]}
             onChangeText={(text) => handleInput(key, text)}
             placeholder={label}
@@ -69,33 +119,89 @@ export default function RegistroEstacionamiento() {
         </View>
       ))}
 
-      {/* Selección de horas */}
+      {/* 🗺️ Mapa para dirección */}
+      <View className="mb-4">
+        <Text className="mb-2 font-medium" style={{ color: "#B2A83F" }}>
+          Dirección (selecciona en el mapa)
+        </Text>
+        <View style={{ height: 250, borderRadius: 10, overflow: "hidden" }}>
+          {location && (
+            <MapView
+              style={{ flex: 1 }}
+              initialRegion={{
+                latitude: location.latitude,
+                longitude: location.longitude,
+                latitudeDelta: 0.005,
+                longitudeDelta: 0.005,
+              }}
+              onPress={handleMapPress}
+            >
+              {location && <Marker coordinate={location} />}
+            </MapView>
+          )}
+        </View>
+        {form.latitud && (
+          <Text className="text-gray-700 mt-2 text-sm">
+            📍 Latitud: {form.latitud} | Longitud: {form.longitud}
+          </Text>
+        )}
+      </View>
+
+      {/* 🕒 Horarios con icono de reloj */}
       <View className="flex-row justify-between">
         <View className="w-[48%]">
-          <Text className="text-gray-700 mb-1">Horario de apertura*</Text>
-          <TextInput
-            className="border border-gray-300 rounded-lg px-3 py-2"
-            placeholder="Ej: 08:00"
-            value={form.apertura}
-            onChangeText={(text) => handleInput("apertura", text)}
-          />
+          <Text className="mb-1 font-medium" style={{ color: "#B2A83F" }}>
+            Horario de apertura*
+          </Text>
+          <View className="flex-row items-center border rounded-lg px-3 py-2" style={{ borderColor: "#7BB3CD", backgroundColor: "white" }}>
+            <TextInput
+              className="flex-1"
+              editable={false}
+              value={form.apertura}
+              placeholder="Ej: 08:00"
+            />
+            <TouchableOpacity onPress={() => { setPickerType("apertura"); setShowPicker(true); }}>
+              <MaterialIcons name="access-time" size={24} color="#FD721D" />
+            </TouchableOpacity>
+          </View>
         </View>
+
         <View className="w-[48%]">
-          <Text className="text-gray-700 mb-1">Horario de cierre*</Text>
-          <TextInput
-            className="border border-gray-300 rounded-lg px-3 py-2"
-            placeholder="Ej: 22:00"
-            value={form.cierre}
-            onChangeText={(text) => handleInput("cierre", text)}
-          />
+          <Text className="mb-1 font-medium" style={{ color: "#B2A83F" }}>
+            Horario de cierre*
+          </Text>
+          <View className="flex-row items-center border rounded-lg px-3 py-2" style={{ borderColor: "#7BB3CD", backgroundColor: "white" }}>
+            <TextInput
+              className="flex-1"
+              editable={false}
+              value={form.cierre}
+              placeholder="Ej: 22:00"
+            />
+            <TouchableOpacity onPress={() => { setPickerType("cierre"); setShowPicker(true); }}>
+              <MaterialIcons name="access-time" size={24} color="#FD721D" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
+      {showPicker && (
+        <DateTimePicker
+          value={new Date()}
+          mode="time"
+          is24Hour={true}
+          display="default"
+          onChange={handleTimeChange}
+        />
+      )}
+
       {/* Licencia */}
       <View className="mt-6">
-        <Text className="text-gray-700 mb-2">Licencia de funcionamiento*</Text>
+        <Text className="mb-2 font-medium" style={{ color: "#B2A83F" }}>
+          Licencia de funcionamiento*
+        </Text>
         <TouchableOpacity
-          className="border border-gray-300 rounded-lg items-center py-3"
+          className="border rounded-lg items-center py-3"
+          style={{ borderColor: "#7BB3CD", backgroundColor: "white" }}
           onPress={() => pickImage((uri) => setLicenciaUri(uri))}
         >
           {licenciaUri ? (
@@ -108,9 +214,12 @@ export default function RegistroEstacionamiento() {
 
       {/* Foto de referencia */}
       <View className="mt-6">
-        <Text className="text-gray-700 mb-2">Foto de referencia*</Text>
+        <Text className="mb-2 font-medium" style={{ color: "#B2A83F" }}>
+          Foto de referencia*
+        </Text>
         <TouchableOpacity
-          className="border border-gray-300 rounded-lg items-center py-3"
+          className="border rounded-lg items-center py-3"
+          style={{ borderColor: "#7BB3CD", backgroundColor: "white" }}
           onPress={() => pickImage((uri) => setFotoUri(uri))}
         >
           {fotoUri ? (
@@ -125,10 +234,17 @@ export default function RegistroEstacionamiento() {
       <Button
         mode="contained"
         onPress={handleSubmit}
-        className="mt-8 bg-black py-1 rounded-full"
+        className="mt-8 py-1 rounded-full"
+        style={{ backgroundColor: "#7BB3CD" }}
+        labelStyle={{ color: "#F6EEE4", fontWeight: "bold" }}
       >
         Registrar
       </Button>
-    </ScrollView>
+    <ScrollView
+  className="flex-1 px-5 py-4"
+  style={{ backgroundColor: "#F6EEE4" }}
+  contentContainerStyle={{ paddingBottom: 40 }} // 👈 agrega esto
+  >
+
   );
 }

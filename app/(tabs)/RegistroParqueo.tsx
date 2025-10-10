@@ -32,14 +32,22 @@ export default function RegistroEstacionamiento() {
     latitud: "",
     longitud: "",
     horarios: {
-      lunes: { apertura: "", cierre: "" },
-      martes: { apertura: "", cierre: "" },
-      miercoles: { apertura: "", cierre: "" },
-      jueves: { apertura: "", cierre: "" },
-      viernes: { apertura: "", cierre: "" },
+      lunes_a_viernes: { apertura: "", cierre: "" },
       sabado: { apertura: "", cierre: "" },
       domingo: { apertura: "", cierre: "" },
     },
+  });
+
+  const [errors, setErrors] = useState<any>({
+    nombre: "",
+    telefono: "",
+    capacidadAutos: "",
+    capacidadMotos: "",
+    tarifaAutos: "",
+    tarifaMotos: "",
+    tarifaAutosDia: "",
+    tarifaMotosDia: "",
+    horarios: {},
   });
 
   const [licenciaUri, setLicenciaUri] = useState<string | null>(null);
@@ -78,9 +86,63 @@ export default function RegistroEstacionamiento() {
     }
   };
 
-  const handleInput = (key: string, value: string) => {
-    setForm({ ...form, [key]: value });
+  const validateField = (key: string, value: string) => {
+    let error = "";
+    if (key === "nombre") {
+      if (value.length < 3 || value.length > 20)
+        error = "El nombre debe tener entre 3 y 20 caracteres.";
+    }
+    if (key === "telefono") {
+      if (!/^\d{8}$/.test(value)) error = "El teléfono debe tener 8 números.";
+    }
+    if (key === "capacidadAutos" || key === "capacidadMotos") {
+      const num = Number(value);
+      if (isNaN(num) || num < 1 || num > 200)
+        error = "La capacidad debe ser entre 1 y 200.";
+    }
+    if (
+      key === "tarifaAutos" ||
+      key === "tarifaMotos" ||
+      key === "tarifaAutosDia" ||
+      key === "tarifaMotosDia"
+    ) {
+      const num = Number(value);
+      if (isNaN(num) || num < 1 || num > 99)
+        error = "La tarifa debe ser entre 1 y 99.";
+    }
+
+    setErrors((prev: any) => ({ ...prev, [key]: error }));
   };
+
+  const handleInput = (key: string, value: string) => {
+  let newValue = value;
+
+  // Limitar valores máximos
+  if (key === "nombre") {
+    newValue = value.slice(0, 20); // máximo 20 caracteres
+  }
+  if (key === "telefono") {
+    newValue = value.replace(/\D/g, "").slice(0, 8); // solo números, máximo 8
+  }
+  if (key === "capacidadAutos" || key === "capacidadMotos") {
+    let num = parseInt(value.replace(/\D/g, "")) || 0;
+    if (num > 200) num = 200;
+    newValue = num.toString();
+  }
+  if (
+    key === "tarifaAutos" ||
+    key === "tarifaMotos" ||
+    key === "tarifaAutosDia" ||
+    key === "tarifaMotosDia"
+  ) {
+    let num = parseInt(value.replace(/\D/g, "")) || 0;
+    if (num > 99) num = 99;
+    newValue = num.toString();
+  }
+
+  setForm({ ...form, [key]: newValue });
+  validateField(key, newValue);
+};
 
   const handleMapPress = (event: MapPressEvent) => {
     const { latitude, longitude } = event.nativeEvent.coordinate;
@@ -94,24 +156,54 @@ export default function RegistroEstacionamiento() {
       const hours = selectedDate.getHours().toString().padStart(2, "0");
       const minutes = selectedDate.getMinutes().toString().padStart(2, "0");
       const formatted = `${hours}:${minutes}`;
-      setForm({
-        ...form,
-        horarios: {
-          ...form.horarios,
-          [dia]: { ...form.horarios[dia], [tipo]: formatted },
-        },
-      });
+
+      const newHorarios = {
+        ...form.horarios,
+        [dia]: { ...form.horarios[dia], [tipo]: formatted },
+      };
+
+      // Validar que apertura <= cierre
+      const apertura = newHorarios[dia].apertura;
+      const cierre = newHorarios[dia].cierre;
+      let horarioError = "";
+      if (apertura && cierre && apertura > cierre) {
+        horarioError = "La hora de apertura no puede ser mayor que la de cierre.";
+      }
+
+      setForm({ ...form, horarios: newHorarios });
+      setErrors((prev: any) => ({
+        ...prev,
+        horarios: { ...prev.horarios, [dia]: horarioError },
+      }));
     }
     setShowPicker(false);
     setPickerInfo(null);
   };
 
   const handleSubmit = () => {
+    // Validar antes de enviar
+    let valid = true;
+    Object.entries(form).forEach(([key, value]) => {
+      if (typeof value === "string") validateField(key, value);
+    });
+
+    Object.values(errors).forEach((err) => {
+      if (err) valid = false;
+    });
+
+    Object.values(errors.horarios || {}).forEach((err) => {
+      if (err) valid = false;
+    });
+
+    if (!valid) {
+      alert("Corrige los errores antes de enviar.");
+      return;
+    }
+
     console.log("Datos completos del estacionamiento:", form);
     alert("Registro enviado ✅");
   };
 
-  // 🌟 PÁGINA 1 — Datos Generales
   const renderPagina1 = () => (
     <ScrollView
       className="flex-1 px-5 py-4"
@@ -127,7 +219,6 @@ export default function RegistroEstacionamiento() {
         REGISTRO DEL ESTACIONAMIENTO
       </Text>
 
-      {/* Campos principales */}
       {[
         ["nombre", "Nombre del estacionamiento"],
         ["telefono", "Teléfono"],
@@ -149,14 +240,24 @@ export default function RegistroEstacionamiento() {
               borderWidth: 1,
               backgroundColor: "white",
             }}
-           value={String(form[key as keyof typeof form])}
+            value={String(form[key as keyof typeof form])}
             onChangeText={(text) => handleInput(key, text)}
             placeholder={label}
+            keyboardType={
+              key.includes("telefono") ||
+              key.includes("capacidad") ||
+              key.includes("tarifa")
+                ? "numeric"
+                : "default"
+            }
           />
+          {errors[key] ? (
+            <Text style={{ color: "red", marginTop: 2 }}>{errors[key]}</Text>
+          ) : null}
         </View>
       ))}
 
-      {/* 🏢 Tipo de lugar */}
+      {/* Tipo de lugar */}
       <View className="mb-4">
         <Text className="mb-1 font-medium" style={{ color: "#B2A83F" }}>
           Tipo de lugar*
@@ -180,7 +281,7 @@ export default function RegistroEstacionamiento() {
         </View>
       </View>
 
-      {/* 🗺️ Mapa */}
+      {/* Mapa */}
       <View className="mb-4">
         <Text className="mb-2 font-medium" style={{ color: "#B2A83F" }}>
           Dirección (selecciona en el mapa)
@@ -208,7 +309,7 @@ export default function RegistroEstacionamiento() {
         )}
       </View>
 
-      {/* 📄 Licencia */}
+      {/* Licencia */}
       <View className="mt-6">
         <Text className="mb-2 font-medium" style={{ color: "#B2A83F" }}>
           Licencia de funcionamiento*
@@ -237,7 +338,7 @@ export default function RegistroEstacionamiento() {
         )}
       </View>
 
-      {/* 📸 Foto de referencia */}
+      {/* Foto */}
       <View className="mt-6">
         <Text className="mb-2 font-medium" style={{ color: "#B2A83F" }}>
           Foto de referencia*
@@ -263,7 +364,6 @@ export default function RegistroEstacionamiento() {
         )}
       </View>
 
-      {/* Botón siguiente */}
       <Button
         mode="contained"
         onPress={() => setPagina(2)}
@@ -271,11 +371,12 @@ export default function RegistroEstacionamiento() {
         style={{ backgroundColor: "#7BB3CD" }}
         labelStyle={{ color: "#F6EEE4", fontWeight: "bold" }}
       >
-        Siguiente 
+        Siguiente
       </Button>
     </ScrollView>
   );
 
+  // PÁGINA 2 — Horarios
   const renderPagina2 = () => (
     <ScrollView
       className="flex-1 px-5 py-4"
@@ -289,13 +390,17 @@ export default function RegistroEstacionamiento() {
         HORARIOS SEMANALES
       </Text>
 
-      {Object.entries(form.horarios).map(([dia, horario]) => (
+      {[
+        { dia: "lunes_a_viernes", label: "Lunes a Viernes" },
+        { dia: "sabado", label: "Sábado" },
+        { dia: "domingo", label: "Domingo" },
+      ].map(({ dia, label }) => (
         <View key={dia} className="mb-4">
           <Text
             className="text-lg font-medium mb-2 capitalize"
             style={{ color: "#B2A83F" }}
           >
-            {dia}
+            {label}
           </Text>
           <View className="flex-row justify-between">
             {["apertura", "cierre"].map((tipo) => (
@@ -310,7 +415,11 @@ export default function RegistroEstacionamiento() {
                   <TextInput
                     className="flex-1"
                     editable={false}
-                    value={horario[tipo as "apertura" | "cierre"]}
+                    value={
+                      form.horarios[dia as keyof typeof form.horarios]?.[
+                        tipo as "apertura" | "cierre"
+                      ] || ""
+                    }
                     placeholder={tipo === "apertura" ? "Ej: 08:00" : "Ej: 22:00"}
                   />
                   <TouchableOpacity
@@ -325,6 +434,11 @@ export default function RegistroEstacionamiento() {
                     <MaterialIcons name="access-time" size={24} color="#FD721D" />
                   </TouchableOpacity>
                 </View>
+                {errors.horarios?.[dia] ? (
+                  <Text style={{ color: "red", marginTop: 2 }}>
+                    {errors.horarios[dia]}
+                  </Text>
+                ) : null}
               </View>
             ))}
           </View>
@@ -341,7 +455,6 @@ export default function RegistroEstacionamiento() {
         />
       )}
 
-      {/* Botones de navegación */}
       <View className="flex-row justify-between mt-6">
         <Button
           mode="contained"
@@ -358,7 +471,7 @@ export default function RegistroEstacionamiento() {
           style={{ backgroundColor: "#7BB3CD", borderRadius: 50, width: "45%" }}
           labelStyle={{ color: "white" }}
         >
-          Registrar 
+          Registrar
         </Button>
       </View>
     </ScrollView>

@@ -1,52 +1,58 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+// CAMBIO: Importamos 'Region' directamente para evitar duplicados
 import MapView, { Region, Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Feather } from '@expo/vector-icons';
-// ❌ Reemplazamos ParkeoCard por ParkeoPopup
-// ✅ 1. IMPORTAR EL NUEVO POPUP
 import ParkeoPopup from '../../components/Mapa/ParkeoPopup'; 
+import axios from 'axios';
 
-// --- Tipos de Datos (Añadimos Rating e Imagen) ---
-type Parqueo = { 
+type ParqueoParaVista = { 
     id: string; 
     nombre: string; 
     latitud: number; 
     longitud: number; 
-    horario: string; 
-    tarifa: string; 
+    horario: string;
+    tarifa: string;
     disponible: boolean; 
-    // ✅ Propiedades adicionales requeridas por ParkeoPopup
     rating: number; 
     imageUri: string;
 };
 
-type RegionState = { 
-    latitude: number; 
-    longitude: number; 
-    latitudeDelta: number; 
-    longitudeDelta: number; 
+type CalificacionApi = {
+    puntuacion: string;
 };
 
-const INITIAL_DELTA = 0.04;
+type HorarioApi = {
+    diaSemana: string;
+    horaAbrir: string;
+    horaCerrar: string;
+};
 
-// --- Datos Mock (ACTUALIZADOS con Rating e Image) ---
-const MOCK_PARQUEOS: Parqueo[] = [
-    { id: 'p1', nombre: 'Central Parking', latitud: -17.3942, longitud: -66.1578, horario: 'L-D: 8:00 - 22:00', tarifa: '5 Bs/h', disponible: true, rating: 4, imageUri: 'https://picsum.photos/seed/p1/100/80' },
-    { id: 'p2', nombre: 'Parqueo El Prado (Lleno)', latitud: -17.3915, longitud: -66.1601, horario: 'L-V: 9:00 - 18:00', tarifa: '8 Bs/h', disponible: false, rating: 3, imageUri: 'https://picsum.photos/seed/p2/100/80' },
-    { id: 'p4', nombre: 'Terminal Sur', latitud: -17.3990, longitud: -66.1625, horario: '24/7', tarifa: '6 Bs/h', disponible: true, rating: 5, imageUri: 'https://picsum.photos/seed/p4/100/80' },
-    { id: 'p5', nombre: 'Supermercado H', latitud: -17.3955, longitud: -66.1650, horario: 'L-S: 8:00 - 21:00', tarifa: '7 Bs/h', disponible: false, rating: 2, imageUri: 'https://picsum.photos/seed/p5/100/80' },
-];
+type ParqueoApi = {
+    id: number;
+    nombre: string;
+    direccion: string;
+    latitud: number;
+    longitud: number;
+    horarios: HorarioApi[];
+    calificaciones: CalificacionApi[];
+};
+
+const API_URL = 'https://parkado-backend.vercel.app/api/parqueos/details';
+const INITIAL_DELTA = 0.04;
 
 // --- Componente Principal ---
 export default function Mapa() {
     const mapRef = useRef<MapView | null>(null);
-    const [region, setRegion] = useState<RegionState | null>(null);
+    const [region, setRegion] = useState<Region | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
-    const [selectedParking, setSelectedParking] = useState<Parqueo | null>(null);
+    const [selectedParking, setSelectedParking] = useState<ParqueoParaVista | null>(null);
+    const [parqueos, setParqueos] = useState<ParqueoParaVista[]>([]);
+    const [isLoadingApi, setIsLoadingApi] = useState(true);
 
+    // useEffect para obtener la ubicación del usuario
     useEffect(() => {
-        // ... Lógica de obtención de ubicación (sin cambios)
         (async () => {
             try {
                 const { status } = await Location.requestForegroundPermissionsAsync();
@@ -67,6 +73,47 @@ export default function Mapa() {
         })();
     }, []);
 
+    // useEffect para llamar a la API y transformar los datos
+    useEffect(() => {
+        const fetchAndTransformParqueos = async () => {
+            try {
+                const response = await axios.get<ParqueoApi[]>(API_URL);
+                const datosTransformados = response.data.map((p): ParqueoParaVista => {
+                    // Lógica para calcular rating promedio
+                    const totalPuntuacion = p.calificaciones.reduce((sum, cal) => sum + parseInt(cal.puntuacion, 10), 0);
+                    const ratingPromedio = p.calificaciones.length > 0 ? totalPuntuacion / p.calificaciones.length : 0;
+                    
+                    // Lógica para formatear un horario simple
+                    const primerHorario = p.horarios[0];
+                    const horarioStr = primerHorario ? `${primerHorario.diaSemana}: ${new Date(primerHorario.horaAbrir).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${new Date(primerHorario.horaCerrar).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'No disponible';
+
+                    return {
+                        id: p.id.toString(),
+                        nombre: p.nombre,
+                        latitud: p.latitud + (Math.random() - 0.5) * 0.0001,
+        longitud: p.longitud + (Math.random() - 0.5) * 0.0001,
+                        rating: parseFloat(ratingPromedio.toFixed(1)),
+                        imageUri: `https://picsum.photos/seed/${p.id}/100/80`,
+                        horario: horarioStr,
+                        tarifa: '7 Bs/h', // Valor por defecto
+                        disponible: true, // Asumimos que están disponibles
+                    };
+                });
+                setParqueos(datosTransformados);
+            } catch (error) {
+                // Si la API falla, actualizamos el mensaje de error
+                setErrorMsg("Error al conectar con el servidor de parqueos.");
+                console.error(error);
+            } finally {
+                // Avisamos que la carga de la API terminó
+                setIsLoadingApi(false);
+            }
+        };
+
+        fetchAndTransformParqueos();
+    }, []); // El array vacío asegura que se llame solo una vez
+
+    // --- Funciones de Interacción ---
     const handleZoom = (factor: number) => {
         if (!region) return;
         const newRegion: Region = {
@@ -75,10 +122,9 @@ export default function Mapa() {
             longitudeDelta: region.longitudeDelta * factor,
         };
         mapRef.current?.animateToRegion(newRegion, 300);
-        setRegion(newRegion);
     };
 
-    const handleMarkerPress = (parqueo: Parqueo) => {
+    const handleMarkerPress = (parqueo: ParqueoParaVista) => {
         setSelectedParking(parqueo);
         mapRef.current?.animateToRegion({
             latitude: parqueo.latitud,
@@ -88,24 +134,24 @@ export default function Mapa() {
         }, 500);
     };
 
-    // FUNCIÓN DE CIERRE DE POPUP (Nombre de la función sin cambios)
     const handleCloseCard = () => {
         setSelectedParking(null);
     };
 
-    // --- Vistas de Carga/Error (sin cambios) ---
-    if (errorMsg || !region) {
-        if (errorMsg) {
-            return (
-                <View className="flex-1 items-center justify-center bg-red-50 p-4">
-                    <Text className="text-lg font-bold text-red-700 text-center">{errorMsg}</Text>
-                </View>
-            );
-        }
+    // --- Vistas de Carga y Error ---
+    if (errorMsg) {
+        return (
+            <View className="flex-1 items-center justify-center bg-red-50 p-4">
+                <Text className="text-lg font-bold text-red-700 text-center">{errorMsg}</Text>
+            </View>
+        );
+    }
+
+    if (!region || isLoadingApi) {
         return (
             <View className="flex-1 items-center justify-center bg-gray-100">
                 <ActivityIndicator size="large" color="#4F46E5" />
-                <Text className="mt-2 text-base text-gray-500">Cargando mapa...</Text>
+                <Text className="mt-2 text-base text-gray-500">Cargando mapa y parqueos...</Text>
             </View>
         );
     }
@@ -113,7 +159,6 @@ export default function Mapa() {
     // --- Render Principal ---
     return (
         <View className="flex-1"> 
-            
             <View style={StyleSheet.absoluteFillObject}> 
                 <MapView
                     ref={mapRef}
@@ -123,7 +168,7 @@ export default function Mapa() {
                     onRegionChangeComplete={setRegion}
                     onPress={handleCloseCard} 
                 >
-                    {MOCK_PARQUEOS.map((parqueo) => (
+                    {parqueos.map((parqueo) => (
                         <Marker
                             key={parqueo.id}
                             coordinate={{ latitude: parqueo.latitud, longitude: parqueo.longitud }}
@@ -135,7 +180,7 @@ export default function Mapa() {
                 </MapView>
             </View>
 
-            {/* CONTROLES DE ZOOM (sin cambios) */}
+            {/* Controles de Zoom */}
             <View 
                 className="absolute bottom-6 right-6 z-50 flex-col space-y-3"
                 style={{ elevation: 50 }} 
@@ -148,10 +193,10 @@ export default function Mapa() {
                 </TouchableOpacity>
             </View>
             
-            {/* ✅ 4. RENDERIZADO CONDICIONAL DEL POPUP */}
+            {/* Popup de Información del Parqueo */}
             {selectedParking && (
                 <ParkeoPopup 
-                    details={selectedParking} // Le pasamos el parqueo seleccionado como 'details'
+                    details={selectedParking}
                     onClose={handleCloseCard} 
                 />
             )}

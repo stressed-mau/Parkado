@@ -1,17 +1,49 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import axios from "axios";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { z } from "zod";
 import Logo from "../../assets/Logo";
 
+// === SCHEMA DE VALIDACIÓN ===
+const registerSchema = z.object({
+  nombre: z
+    .string()
+    .min(3, "Debe tener al menos 3 caracteres")
+    .max(16, "Máximo 16 caracteres"),
+  apellido: z
+    .string()
+    .min(3, "Debe tener al menos 3 caracteres")
+    .max(16, "Máximo 16 caracteres"),
+  correo: z.string().email("Correo electrónico inválido"),
+  telefono: z
+    .string()
+    .regex(/^\d{8}$/, "Debe tener 8 dígitos"),
+  password: z
+    .string()
+    .regex(
+      /^(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/,
+      "Debe tener 8 caracteres, una mayúscula y un carácter especial"
+    ),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  path: ["confirmPassword"],
+  message: "Las contraseñas no coinciden",
+});
+
 export default function RegisterScreen() {
+  const router = useRouter();
+
   const [nombre, setNombre] = useState("");
   const [apellido, setApellido] = useState("");
   const [correo, setCorreo] = useState("");
@@ -30,135 +62,93 @@ export default function RegisterScreen() {
 
   const [isFormValid, setIsFormValid] = useState(false);
 
-  // Validar nombre
-  const handleNombreChange = (text: string) => {
-    setNombre(text);
-    if (text.length < 3) {
-      setErrorNombre("Debe tener al menos 3 caracteres");
-    } else if (text.length > 16) {
-      setErrorNombre("Máximo 16 caracteres");
-    } else {
-      setErrorNombre("");
-    }
-  };
-
-  // Validar apellido
-  const handleApellidoChange = (text: string) => {
-    setApellido(text);
-    if (text.length < 3) {
-      setErrorApellido("Debe tener al menos 3 caracteres");
-    } else if (text.length > 16) {
-      setErrorApellido("Máximo 16 caracteres");
-    } else {
-      setErrorApellido("");
-    }
-  };
-
-  // Validar correo
-  const handleCorreoChange = (text: string) => {
-    setCorreo(text);
-    const correoRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!correoRegex.test(text)) {
-      setErrorCorreo("Correo electrónico inválido");
-    } else {
-      setErrorCorreo("");
-    }
-  };
-
-  // Validar teléfono (8 dígitos)
-  const handleTelefonoChange = (text: string) => {
-    const numeric = text.replace(/[^0-9]/g, "");
-    setTelefono(numeric);
-    if (numeric.length === 0) {
-      setErrorTelefono("Ingrese un número válido");
-    } else if (numeric.length > 8) {
-      setErrorTelefono("Máximo 8 dígitos");
-    } else if (numeric.length < 8) {
-      setErrorTelefono("Debe tener 8 dígitos");
-    } else {
-      setErrorTelefono("");
-    }
-  };
-
-  // Validar contraseña
-  const handlePasswordChange = (text: string) => {
-    setPassword(text);
-    const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/;
-    if (!passwordRegex.test(text)) {
-      setErrorPassword(
-        "Debe tener 8 caracteres, una mayúscula y un carácter especial"
-      );
-    } else {
-      setErrorPassword("");
-    }
-
-    if (confirmPassword && text !== confirmPassword) {
-      setErrorConfirmPassword("Las contraseñas no coinciden");
-    } else {
-      setErrorConfirmPassword("");
-    }
-  };
-
-  // Validar confirmación
-  const handleConfirmPasswordChange = (text: string) => {
-    setConfirmPassword(text);
-    if (text !== password) {
-      setErrorConfirmPassword("Las contraseñas no coinciden");
-    } else {
-      setErrorConfirmPassword("");
-    }
-  };
-
-  // Verificar si el formulario completo es válido
+  // ===== VALIDACIONES CON ZOD =====
   useEffect(() => {
-    if (
-      nombre &&
-      apellido &&
-      correo &&
-      telefono &&
-      password &&
-      confirmPassword &&
-      !errorNombre &&
-      !errorApellido &&
-      !errorCorreo &&
-      !errorTelefono &&
-      !errorPassword &&
-      !errorConfirmPassword
-    ) {
+    try {
+      registerSchema.parse({
+        nombre,
+        apellido,
+        correo,
+        telefono,
+        password,
+        confirmPassword,
+      });
+
+      // si pasa todas las validaciones
+      setErrorNombre("");
+      setErrorApellido("");
+      setErrorCorreo("");
+      setErrorTelefono("");
+      setErrorPassword("");
+      setErrorConfirmPassword("");
       setIsFormValid(true);
-    } else {
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        const errors = err.flatten().fieldErrors;
+
+        setErrorNombre(errors.nombre?.[0] || "");
+        setErrorApellido(errors.apellido?.[0] || "");
+        setErrorCorreo(errors.correo?.[0] || "");
+        setErrorTelefono(errors.telefono?.[0] || "");
+        setErrorPassword(errors.password?.[0] || "");
+        setErrorConfirmPassword(errors.confirmPassword?.[0] || "");
+      }
       setIsFormValid(false);
     }
-  }, [
-    nombre,
-    apellido,
-    correo,
-    telefono,
-    password,
-    confirmPassword,
-    errorNombre,
-    errorApellido,
-    errorCorreo,
-    errorTelefono,
-    errorPassword,
-    errorConfirmPassword,
-  ]);
+  }, [nombre, apellido, correo, telefono, password, confirmPassword]);
 
-  const handleRegister = () => {
-    alert("✅ Registro exitoso");
+  // ===== REGISTRO =====
+  const handleRegister = async () => {
+    try {
+      const response = await axios.post(
+        "https://parkado-backend.vercel.app/api/auth/register",
+        {
+          nombres: nombre,
+          apellidos: apellido,
+          correoElectronico: correo,
+          password,
+          telefono,
+        },
+        { headers: { "Content-Type": "application/json" } }
+      );
+
+      Alert.alert(
+        "✅ Registro exitoso",
+        response.data.message || "Usuario creado correctamente"
+      );
+
+      setNombre("");
+      setApellido("");
+      setCorreo("");
+      setTelefono("");
+      setPassword("");
+      setConfirmPassword("");
+
+      setTimeout(() => {
+        router.push("/(tabs)/Login");
+      }, 1500);
+    } catch (error: any) {
+      console.error("Error al registrar:", error);
+      const msg =
+        error.response?.data?.message ||
+        "No se pudo completar el registro. Intenta nuevamente.";
+      Alert.alert("❌ Error al registrar", msg);
+    }
   };
 
+  // === UI SIN CAMBIOS ===
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-[#F6EEE4]"
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <ScrollView
+      <KeyboardAwareScrollView
         className="flex-1 px-6 pt-10"
+        enableOnAndroid={true}
+        extraScrollHeight={100}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Logo */}
         <View className="items-center mb-6">
           <Logo />
         </View>
@@ -168,7 +158,7 @@ export default function RegisterScreen() {
         </Text>
 
         <View className="mt-8 space-y-4">
-          {/* Nombre */}
+          {/* === NOMBRE === */}
           <View>
             <Text className="text-xs font-bold text-[#B2A83F] mb-1">
               NOMBRE(S)
@@ -177,7 +167,7 @@ export default function RegisterScreen() {
               placeholder="Ingrese sus nombres"
               className="border border-gray-300 rounded-lg p-3 bg-white"
               value={nombre}
-              onChangeText={handleNombreChange}
+              onChangeText={setNombre}
               maxLength={16}
             />
             {errorNombre ? (
@@ -185,7 +175,7 @@ export default function RegisterScreen() {
             ) : null}
           </View>
 
-          {/* Apellido */}
+          {/* === APELLIDO === */}
           <View>
             <Text className="text-xs font-bold text-[#B2A83F] mb-1">
               APELLIDO(S)
@@ -194,7 +184,7 @@ export default function RegisterScreen() {
               placeholder="Ingrese sus apellidos"
               className="border border-gray-300 rounded-lg p-3 bg-white"
               value={apellido}
-              onChangeText={handleApellidoChange}
+              onChangeText={setApellido}
               maxLength={16}
             />
             {errorApellido ? (
@@ -202,7 +192,7 @@ export default function RegisterScreen() {
             ) : null}
           </View>
 
-          {/* Correo */}
+          {/* === CORREO === */}
           <View>
             <Text className="text-xs font-bold text-[#B2A83F] mb-1">
               CORREO ELECTRÓNICO
@@ -212,14 +202,14 @@ export default function RegisterScreen() {
               keyboardType="email-address"
               className="border border-gray-300 rounded-lg p-3 bg-white"
               value={correo}
-              onChangeText={handleCorreoChange}
+              onChangeText={setCorreo}
             />
             {errorCorreo ? (
               <Text className="text-red-500 text-xs mt-1">{errorCorreo}</Text>
             ) : null}
           </View>
 
-          {/* Teléfono */}
+          {/* === TELÉFONO === */}
           <View>
             <Text className="text-xs font-bold text-[#B2A83F] mb-1">
               TELÉFONO
@@ -229,7 +219,7 @@ export default function RegisterScreen() {
               keyboardType="numeric"
               className="border border-gray-300 rounded-lg p-3 bg-white"
               value={telefono}
-              onChangeText={handleTelefonoChange}
+              onChangeText={(t) => setTelefono(t.replace(/[^0-9]/g, ""))}
               maxLength={8}
             />
             {errorTelefono ? (
@@ -237,7 +227,7 @@ export default function RegisterScreen() {
             ) : null}
           </View>
 
-          {/* Contraseña */}
+          {/* === CONTRASEÑA === */}
           <View>
             <Text className="text-xs font-bold text-[#B2A83F] mb-1">
               CONTRASEÑA
@@ -248,7 +238,7 @@ export default function RegisterScreen() {
                 secureTextEntry={!showPassword}
                 className="flex-1 p-3"
                 value={password}
-                onChangeText={handlePasswordChange}
+                onChangeText={setPassword}
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons
@@ -263,7 +253,7 @@ export default function RegisterScreen() {
             ) : null}
           </View>
 
-          {/* Confirmar Contraseña */}
+          {/* === CONFIRMAR CONTRASEÑA === */}
           <View>
             <Text className="text-xs font-bold text-[#B2A83F] mb-1">
               CONFIRMAR CONTRASEÑA
@@ -274,7 +264,7 @@ export default function RegisterScreen() {
                 secureTextEntry={!showConfirmPassword}
                 className="flex-1 p-3"
                 value={confirmPassword}
-                onChangeText={handleConfirmPasswordChange}
+                onChangeText={setConfirmPassword}
               />
               <TouchableOpacity
                 onPress={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -294,7 +284,7 @@ export default function RegisterScreen() {
           </View>
         </View>
 
-        {/* Botón de registro */}
+        {/* === BOTÓN REGISTRAR === */}
         <TouchableOpacity
           className={`py-3 mt-8 rounded-lg ${
             isFormValid ? "bg-black" : "bg-gray-400"
@@ -306,7 +296,7 @@ export default function RegisterScreen() {
             REGISTRAR
           </Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </KeyboardAvoidingView>
   );
 }

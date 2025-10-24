@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator } from 'react-native'; // Quitamos StyleSheet
+import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 
@@ -56,7 +56,6 @@ const formatHour = (isoString: string) => {
 const RatingStars = ({ rating }: { rating: number }) => {
     const fullStars = Math.floor(rating);
     const emptyStars = 5 - Math.ceil(rating);
-    // Usamos className de Tailwind
     return (
         <Text className="text-yellow-500">
             {'★'.repeat(fullStars)}
@@ -64,7 +63,6 @@ const RatingStars = ({ rating }: { rating: number }) => {
         </Text>
     );
 };
-
 
 // --- Pantalla Principal ---
 export default function DetalleParqueoScreen() {
@@ -130,6 +128,24 @@ export default function DetalleParqueoScreen() {
         }, [parqueoId])
     );
 
+    // 🆕 FUNCIÓN PARA NAVEGAR AL MAPA CON LA UBICACIÓN DEL PARQUEO
+    const handleNavigateToMap = () => {
+        if (!data) return;
+        
+        console.log(`Navegando al mapa para mostrar: ${data.nombre} (Lat: ${data.latitud}, Lng: ${data.longitud})`);
+        
+        // Navega a la tab del mapa y pasa las coordenadas como parámetros
+        router.push({
+            pathname: '/(tabs)/Mapa' as any,
+            params: {
+                targetLat: data.latitud.toString(),
+                targetLng: data.longitud.toString(),
+                targetName: data.nombre,
+                showRoute: 'true' // Indica que debe mostrar la ruta
+            }
+        });
+    };
+
     // --- FUNCIÓN PARA NAVEGAR A RESERVA ---
     const handleNavigateToReserva = () => {
         if (!data) return;
@@ -139,7 +155,7 @@ export default function DetalleParqueoScreen() {
 
         console.log(`Navegando a Reserva para: ${data.nombre} (ID: ${data.id})`);
         router.push({
-            pathname: '/(tabs)/reserva' as any, // Navega a la nueva pantalla app/reserva.tsx
+            pathname: '/(tabs)/reserva' as any,
             params: {
               parqueoId: data.id.toString(),
               parqueoNombre: data.nombre,
@@ -153,7 +169,6 @@ export default function DetalleParqueoScreen() {
 
     // --- Vistas de Carga y Error ---
     if (isLoading) {
-        // Usamos clases de Tailwind directamente
         return (
             <View className="flex-1 items-center justify-center bg-gray-100 dark:bg-gray-800">
                 <ActivityIndicator size="large" color="#4F46E5" />
@@ -184,14 +199,7 @@ export default function DetalleParqueoScreen() {
     }
 
     // --- Render Principal ---
-    const getCapacidad = (tipo: string) => {
-        const capacidadObj = data.capacidades?.find(c => c.tipoVehiculo.nombre.toLowerCase() === tipo.toLowerCase());
-        return capacidadObj?.cantidad || 0;
-    };
-
-
     return (
-        // Usamos clases de Tailwind para todo el layout
         <ScrollView className="flex-1 bg-white dark:bg-gray-900">
             {/* Contenedor de Imagen */}
             <View className="w-full h-64 overflow-hidden relative">
@@ -203,7 +211,6 @@ export default function DetalleParqueoScreen() {
                 <TouchableOpacity onPress={() => router.back()} className="absolute top-12 left-4 bg-black/50 p-2 rounded-full active:opacity-70">
                     <Feather name="arrow-left" size={24} color="white" />
                 </TouchableOpacity>
-                {/* <View className="absolute bottom-4 right-4 bg-black/50 p-2 rounded-full"><Text className="text-white font-semibold">Ver fotos</Text></View> */}
             </View>
 
             {/* Contenido Principal */}
@@ -222,23 +229,30 @@ export default function DetalleParqueoScreen() {
                     <Text className="text-xl font-bold text-gray-800 dark:text-gray-200 mr-2">{averageRating.toFixed(1)} </Text>
                     <RatingStars rating={averageRating} />
                     <Text className="text-sm text-gray-500 ml-2"> ({reviewCount} opiniones)</Text>
-                    {/* <Text className="text-sm text-green-600 ml-4"> · Zona de Reserva</Text> */}
                 </View>
 
                 {/* Fila de Acciones */}
                 <View className="flex-row justify-between border-b border-gray-200 dark:border-gray-700 pb-4 mb-4">
-                    {/* Botón de Indicaciones (aún no funcional) */}
-                    <TouchableOpacity className="items-center w-1/5 active:opacity-70">
+                    {/* 🆕 Botón de Indicaciones FUNCIONAL */}
+                    <TouchableOpacity 
+                        className="items-center w-1/5 active:opacity-70"
+                        onPress={handleNavigateToMap}
+                    >
                         <Feather name="navigation" size={24} color="#007BFF" />
                         <Text className="text-xs text-blue-600 dark:text-blue-400 mt-1">Indicaciones</Text>
                     </TouchableOpacity>
-                    {/* Botón de Guardar (aún no funcional) */}
+                    
+                    {/* Botón de Guardar */}
                     <TouchableOpacity className="items-center w-1/5 active:opacity-70">
                         <Feather name="bookmark" size={24} color="#007BFF" />
                         <Text className="text-xs text-blue-600 dark:text-blue-400 mt-1">Guardar</Text>
                     </TouchableOpacity>
-                    {/* BOTÓN RESERVAR CONECTADO */}
-                    <TouchableOpacity className="items-center justify-center w-[35%] active:opacity-70 bg-green-500 rounded-lg py-2" onPress={handleNavigateToReserva}>
+                    
+                    {/* BOTÓN RESERVAR */}
+                    <TouchableOpacity 
+                        className="items-center justify-center w-[35%] active:opacity-70 bg-green-500 rounded-lg py-2" 
+                        onPress={handleNavigateToReserva}
+                    >
                         <Text className="text-sm font-bold text-white">RESERVAR</Text>
                     </TouchableOpacity>
                 </View>
@@ -256,7 +270,6 @@ export default function DetalleParqueoScreen() {
                         ? `${formatHour(horarioDia.horaAbrir)} - ${formatHour(horarioDia.horaCerrar)}`
                         : 'Cerrado';
                     return (
-                        // Usamos flexDirection: 'row' y alignItems: 'center' via Tailwind
                         <View key={index} className="flex-row items-center mb-1">
                             <Feather name="calendar" size={16} color={esCerrado ? '#EF4444' : '#10B981'} />
                             <Text className="text-base text-gray-700 dark:text-gray-300 ml-3 font-semibold w-20">{day.charAt(0).toUpperCase() + day.slice(1)}:</Text>
@@ -298,5 +311,3 @@ export default function DetalleParqueoScreen() {
         </ScrollView>
     );
 };
-
-// Quitamos el StyleSheet.create de aquí

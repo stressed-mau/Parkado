@@ -3,7 +3,6 @@ import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router'; 
 
-// --- Tipos de Datos (Mantenidos) ---
 type Parqueo = { 
     id: string; 
     nombre: string; 
@@ -16,15 +15,13 @@ type Parqueo = {
     imageUri: string;
 };
 
-// --- Propiedades del Componente ---
 interface ParkeoPopupProps {
     details: Parqueo; 
     onClose: () => void;
+    onShowDirections?: () => void;
+    showingDirections?: boolean;
 }
 
-// ------------------------------------------------------------------
-// ESTILOS DE LAYOUT (Estrictamente nativos)
-// ------------------------------------------------------------------
 const styles = StyleSheet.create({ 
     overlay: {
         ...StyleSheet.absoluteFillObject, 
@@ -35,12 +32,15 @@ const styles = StyleSheet.create({
         zIndex: 40,
     }
 });
-// ------------------------------------------------------------------
 
-const ParkeoPopup: React.FC<ParkeoPopupProps> = ({ details, onClose }) => {
+const ParkeoPopup: React.FC<ParkeoPopupProps> = ({ 
+    details, 
+    onClose,
+    onShowDirections,
+    showingDirections = false
+}) => {
     const router = useRouter(); 
     
-    // Función para mostrar estrellas de calificación (simulado)
     const RatingStars = useCallback(({ count }: { count: number }) => {
         const fullStars = Math.floor(count);
         const emptyStars = 5 - fullStars;
@@ -52,48 +52,39 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({ details, onClose }) => {
         );
     }, []);
 
-
-    // ✅ FUNCIÓN DE NAVEGACIÓN (CORREGIDA)
     const handleNavigateToDetails = () => {
-        // 🚀 Navega a la ruta dinámica: /parqueo-detalle/[id].tsx
         router.push({
-            pathname: '/parqueo-detalle/[id]', // <-- 1. USA LA RUTA LITERAL
+            pathname: '/parqueo-detalle/[id]',
             params: { 
-                id: details.id,              // <-- 2. EL ID VA DENTRO DE PARAMS
+                id: details.id,
                 nombre: details.nombre 
             }
         });
-        
-        // 3. CIERRA EL POPUP AL NAVEGAR
         onClose(); 
-    
-    }; // <--- ❗️❗️ ERROR ARREGLADO: LA FUNCIÓN TERMINA AQUÍ ❗️❗️
+    };
 
-    
-    // --- Mapeo de datos (AHORA ESTÁN EN EL LUGAR CORRECTO) ---
+    // 🆕 Nueva función para manejar el botón de direcciones
+    const handleDirectionsPress = () => {
+        if (onShowDirections) {
+            onShowDirections(); // Llama a la función para mostrar la ruta
+            onClose(); // Cierra el modal
+        }
+    };
+
     const name = details.nombre;
     const rating = details.rating || 4;
     const availabilityText = details.disponible ? "¡Disponible ahora!" : "Lleno";
     const imageUri = details.imageUri;
     const detailsText = `Horario: ${details.horario} | Tarifa: ${details.tarifa}`; 
-    
 
-    // --- RETURN PRINCIPAL DEL COMPONENTE (AHORA ESTÁ EN EL LUGAR CORRECTO) ---
     return (
-        // Contenedor principal del Modal (Fondo oscuro)
         <View style={styles.overlay} className="bg-black/40"> 
-            
-            {/* Tarjeta Flotante */}
             <View className="p-4 mx-6 bg-white rounded-xl shadow-2xl z-50 w-11/12">
-                
-                {/* Botón de Cierre */}
                 <TouchableOpacity onPress={onClose} className="absolute top-3 right-3 p-1 z-10 active:opacity-70">
                     <Text className="text-xl font-bold text-gray-500">✕</Text>
                 </TouchableOpacity>
 
-                {/* Área de Contenido */}
                 <View className="flex-row items-start space-x-3 pt-2">
-                    {/* Imagen */}
                     <View className="w-20 h-16 bg-gray-200 rounded-lg justify-center items-center overflow-hidden">
                         <Image
                             source={{ uri: imageUri || 'https://via.placeholder.com/100x80?text=IMG' }}
@@ -102,7 +93,6 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({ details, onClose }) => {
                         />
                     </View>
 
-                    {/* Detalles */}
                     <View className="flex-1">
                         <Text className="text-lg font-bold text-gray-800">{name}</Text>
                         <View className="flex-row items-center my-1">
@@ -115,16 +105,26 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({ details, onClose }) => {
                         </Text>
                     </View>
 
-                    {/* Íconos de Acción */}
                     <View className="flex-col space-y-3 pt-1">
-                    
-                        
-                        {/* Ícono de Mapa/Detalles (NAVEGACIÓN INTERNA) */}
                         <TouchableOpacity onPress={handleNavigateToDetails} className="mt-12 p-2 border border-gray-300 rounded-lg active:opacity-70">
                             <Feather name="calendar" size={20} color="#007BFF" />
                         </TouchableOpacity>
                     </View>
                 </View>
+
+                {/* 🆕 BOTÓN DE INDICACIONES - MÁS PEQUEÑO Y CIERRA EL MODAL */}
+                {onShowDirections && (
+                    <TouchableOpacity 
+                        onPress={handleDirectionsPress} // 🔧 Usa la nueva función
+                        className="mt-3 py-2 px-4 rounded-lg flex-row items-center justify-center gap-2 bg-blue-600" // 🔧 Padding reducido
+                        activeOpacity={0.7}
+                    >
+                        <Feather name="navigation" size={16} color="white" />
+                        <Text className="text-white font-semibold text-xs">
+                            Cómo Llegar
+                        </Text>
+                    </TouchableOpacity>
+                )}
             </View>
         </View>
     );

@@ -6,13 +6,13 @@ import { useRouter } from 'expo-router';
 type Parqueo = { 
     id: string; 
     nombre: string; 
-    latitud: number; 
-    longitud: number; 
-    horario: string; 
-    tarifa: string; 
+    horario: string;
+    tarifa: string;
     disponible: boolean; 
     rating: number; 
     imageUri: string;
+    latitud: number;
+    longitud: number;
 };
 
 interface ParkeoPopupProps {
@@ -46,7 +46,7 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
         const emptyStars = 5 - fullStars;
 
         return (
-            <Text className="text-yellow-500">
+            <Text style={{ color: '#F9B928' }}>
                 {'★'.repeat(fullStars) + '☆'.repeat(emptyStars)}
             </Text>
         );
@@ -63,68 +63,166 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
         onClose(); 
     };
 
-    // 🆕 Nueva función para manejar el botón de direcciones
     const handleDirectionsPress = () => {
         if (onShowDirections) {
-            onShowDirections(); // Llama a la función para mostrar la ruta
-            onClose(); // Cierra el modal
+            onShowDirections();
+            onClose();
         }
     };
 
     const name = details.nombre;
     const rating = details.rating || 4;
     const availabilityText = details.disponible ? "¡Disponible ahora!" : "Lleno";
-    const imageUri = details.imageUri;
+    const imageUri = details.imageUri; // 🔧 Ya viene de la BD desde Mapa.tsx
     const detailsText = `Horario: ${details.horario} | Tarifa: ${details.tarifa}`; 
 
     return (
-        <View style={styles.overlay} className="bg-black/40"> 
-            <View className="p-4 mx-6 bg-white rounded-xl shadow-2xl z-50 w-11/12">
-                <TouchableOpacity onPress={onClose} className="absolute top-3 right-3 p-1 z-10 active:opacity-70">
-                    <Text className="text-xl font-bold text-gray-500">✕</Text>
+        <View style={styles.overlay}> 
+            <View style={{ 
+                padding: 16, 
+                marginHorizontal: 24, 
+                backgroundColor: '#F6EEE4', 
+                borderRadius: 12, 
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 8,
+                elevation: 8,
+                zIndex: 50,
+                width: '88%'
+            }}>
+                {/* Botón de cierre */}
+                <TouchableOpacity 
+                    onPress={onClose} 
+                    style={{
+                        position: 'absolute',
+                        top: 12,
+                        right: 12,
+                        padding: 4,
+                        zIndex: 10
+                    }}
+                    activeOpacity={0.7}
+                >
+                    <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#626C7C' }}>✕</Text>
                 </TouchableOpacity>
 
-                <View className="flex-row items-start space-x-3 pt-2">
-                    <View className="w-20 h-16 bg-gray-200 rounded-lg justify-center items-center overflow-hidden">
+                {/* Contenido principal */}
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', paddingTop: 8 }}>
+                    {/* Imagen más grande */}
+                    <View style={{
+                        width: 100,
+                        height: 80,
+                        backgroundColor: '#E3E5E5',
+                        borderRadius: 8,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        overflow: 'hidden',
+                        marginRight: 12
+                    }}>
                         <Image
-                            source={{ uri: imageUri || 'https://via.placeholder.com/100x80?text=IMG' }}
-                            className="w-full h-full rounded-lg"
+                            source={{ uri: imageUri || 'https://via.placeholder.com/200x160?text=Sin+Imagen' }}
+                            style={{ width: '100%', height: '100%', borderRadius: 8 }}
                             resizeMode="cover"
                         />
                     </View>
 
-                    <View className="flex-1">
-                        <Text className="text-lg font-bold text-gray-800">{name}</Text>
-                        <View className="flex-row items-center my-1">
+                    {/* Info del parqueo */}
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ 
+                            fontSize: 18, 
+                            fontWeight: '600', 
+                            color: '#13343B',
+                            marginBottom: 6
+                        }}>
+                            {name}
+                        </Text>
+                        
+                        {/* Rating */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                             <RatingStars count={rating} />
-                            <Text className="text-xs text-gray-500 ml-2">({rating}.0)</Text>
+                            <Text style={{ fontSize: 12, color: '#626C7C', marginLeft: 6 }}>
+                                ({rating}.0)
+                            </Text>
                         </View>
-                        <Text className="text-sm text-gray-600">{detailsText}</Text>
-                        <Text className={`text-xs mt-1 font-semibold ${details.disponible ? 'text-green-600' : 'text-red-600'}`}>
+                        
+                        {/* Detalles */}
+                        <Text 
+                            style={{ fontSize: 12, color: '#626C7C', marginBottom: 4 }}
+                            numberOfLines={2}
+                        >
+                            {detailsText}
+                        </Text>
+                        
+                        {/* Estado de disponibilidad */}
+                        <Text style={{ 
+                            fontSize: 13, 
+                            fontWeight: '600',
+                            color: details.disponible ? '#32B8C6' : '#ED213A'
+                        }}>
                             {availabilityText}
                         </Text>
                     </View>
-
-                    <View className="flex-col space-y-3 pt-1">
-                        <TouchableOpacity onPress={handleNavigateToDetails} className="mt-12 p-2 border border-gray-300 rounded-lg active:opacity-70">
-                            <Feather name="calendar" size={20} color="#007BFF" />
-                        </TouchableOpacity>
-                    </View>
                 </View>
 
-                {/* 🆕 BOTÓN DE INDICACIONES - MÁS PEQUEÑO Y CIERRA EL MODAL */}
-                {onShowDirections && (
+                {/* 🆕 BOTONES ABAJO - BIEN ORGANIZADOS */}
+                <View style={{ 
+                    flexDirection: 'row', 
+                    marginTop: 16, 
+                    gap: 8,
+                    justifyContent: 'space-between'
+                }}>
+                    {/* Botón Reservar */}
                     <TouchableOpacity 
-                        onPress={handleDirectionsPress} // 🔧 Usa la nueva función
-                        className="mt-3 py-2 px-4 rounded-lg flex-row items-center justify-center gap-2 bg-blue-600" // 🔧 Padding reducido
-                        activeOpacity={0.7}
+                        onPress={handleNavigateToDetails}
+                        style={{
+                            flex: 1,
+                            paddingVertical: 10,
+                            borderRadius: 8,
+                            backgroundColor: '#FD721D',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6
+                        }}
+                        activeOpacity={0.8}
                     >
-                        <Feather name="navigation" size={16} color="white" />
-                        <Text className="text-white font-semibold text-xs">
-                            Cómo Llegar
+                        <Feather name="calendar" size={18} color="#FCFCF9" />
+                        <Text style={{ 
+                            color: '#FCFCF9', 
+                            fontWeight: '600', 
+                            fontSize: 14 
+                        }}>
+                            Reservar
                         </Text>
                     </TouchableOpacity>
-                )}
+
+                    {/* Botón Cómo Llegar */}
+                    {onShowDirections && (
+                        <TouchableOpacity 
+                            onPress={handleDirectionsPress}
+                            style={{
+                                flex: 1,
+                                paddingVertical: 10,
+                                borderRadius: 8,
+                                backgroundColor: '#32B8C6',
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6
+                            }}
+                            activeOpacity={0.8}
+                        >
+                            <Feather name="navigation" size={18} color="#FCFCF9" />
+                            <Text style={{ 
+                                color: '#FCFCF9', 
+                                fontWeight: '600', 
+                                fontSize: 14 
+                            }}>
+                                Cómo Llegar
+                            </Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
         </View>
     );

@@ -1,295 +1,302 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
-import MapView, { Region, Marker, Polyline } from 'react-native-maps';
+// Archivo: app/(tabs)/Mapa.tsx (Versión Final CORREGIDA con OSRM y Flujo de Pago)
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Image, Platform } from 'react-native'; // Añadimos Platform
+import MapView, { Region, Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Feather } from '@expo/vector-icons';
-import ParkeoPopup from '../../components/Mapa/ParkeoPopup'; 
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'; // Añadimos useRouter por si acaso
+import ParkeoPopup from '../../components/Mapa/ParkeoPopup';
 import axios from 'axios';
-import { useLocalSearchParams } from 'expo-router'; // 🆕 Importamos para recibir parámetros
 
-type ParqueoParaVista = { 
-    id: string; 
-    nombre: string; 
-    latitud: number; 
-    longitud: number; 
+// --- TIPOS ---
+type ParqueoParaVista = {
+    id: string;
+    nombre: string;
     horario: string;
     tarifa: string;
-    disponible: boolean; 
-    rating: number; 
+    disponible: boolean;
+    rating: number;
     imageUri: string;
-};
-
-type CalificacionApi = {
-    puntuacion: string;
-};
-
-type HorarioApi = {
-    diaSemana: string;
-    horaAbrir: string;
-    horaCerrar: string;
-};
-
-type ParqueoApi = {
-    id: number;
-    nombre: string;
-    direccion: string;
     latitud: number;
     longitud: number;
-    horarios: HorarioApi[];
-    calificaciones: CalificacionApi[];
 };
+type Coords = { latitude: number; longitude: number; };
 
+// --- CONSTANTES ---
 const API_URL = 'https://parkado-backend.vercel.app/api/parqueos/details';
 const INITIAL_DELTA = 0.04;
+const OSRM_API_URL = 'http://router.project-osrm.org/route/v1/driving/';
+const COCHABAMBA_REGION = { latitude: -17.3936, longitude: -66.1569, latitudeDelta: INITIAL_DELTA, longitudeDelta: INITIAL_DELTA };
+const MARKER_DISPONIBLE = 'https://i.ibb.co/GfhsxmpT/parkeo-disponible.png';
+const MARKER_LLENO = 'https://i.ibb.co/bj78fXYD/parkeo-lleno.png';
 
+// --- Componente Principal ---
 export default function Mapa() {
-    // 🆕 Recibimos parámetros de navegación
-    const params = useLocalSearchParams<{
-        targetLat?: string;
-        targetLng?: string;
-        targetName?: string;
-        showRoute?: string;
-    }>();
-
+    const params = useLocalSearchParams<{ destLat?: string; destLng?: string; destNombre?: string; }>();
+    const router = useRouter(); // Añadimos router por si necesitamos navegar en errores
     const mapRef = useRef<MapView | null>(null);
-    const [region, setRegion] = useState<Region | null>(null);
-    const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-    const [errorMsg, setErrorMsg] = useState<string | null>(null);
-    const [selectedParking, setSelectedParking] = useState<ParqueoParaVista | null>(null);
-    const [parqueos, setParqueos] = useState<ParqueoParaVista[]>([]);
-    const [isLoadingApi, setIsLoadingApi] = useState(true);
-    
-    const [showDirections, setShowDirections] = useState(false);
-    const [routeCoordinates, setRouteCoordinates] = useState<{ latitude: number; longitude: number }[]>([]);
-    const [isLoadingRoute, setIsLoadingRoute] = useState(false);
 
-    // useEffect para obtener la ubicación del usuario
+    // --- Estados ---
+    const [region, setRegion] = useState<Region | null>(COCHABAMBA_REGION);
+    const [userLocation, setUserLocation] = useState<Coords | null>(null); // Tu ubicación
+    const [errorMsg, setErrorMsg] = useState<string | null>(null); // Errores generales
+    const [selectedParking, setSelectedParking] = useState<ParqueoParaVista | null>(null); // Popup
+    const [parqueos, setParqueos] = useState<ParqueoParaVista[]>([]); // Lista de parqueos
+    const [isLoadingApi, setIsLoadingApi] = useState(true); // Carga API parqueos
+    const [isLocationLoading, setIsLocationLoading] = useState(true); // Carga ubicación inicial
+    // Ruta
+    const [destination, setDestination] = useState<Coords | null>(null); // Destino de la ruta
+    const [destinationName, setDestinationName] = useState<string | null>(null);
+    const [routeCoordinates, setRouteCoordinates] = useState<Coords[]>([]);
+    const [isLoadingRoute, setIsLoadingRoute] = useState(false); // Carga OSRM
+
+    // ------------------------------------
+    // EFECTO 1: Permisos y Ubicación Inicial
+    // ------------------------------------
     useEffect(() => {
+        let isMounted = true;
         (async () => {
+            setIsLocationLoading(true);
+            setErrorMsg(null);
+            console.log("MAPA (Efecto 1): Verificando permisos...");
             try {
-                const { status } = await Location.requestForegroundPermissionsAsync();
+                let { status } = await Location.getForegroundPermissionsAsync();
+                if (status !== 'granted') status = (await Location.requestForegroundPermissionsAsync()).status;
                 if (status !== 'granted') {
-                    setErrorMsg('Permiso para acceder a la ubicación denegado.');
+                    if (isMounted) setErrorMsg('Permiso de ubicación denegado.');
+                    console.error("MAPA (Efecto 1): Permiso denegado.");
                     return;
                 }
-                const location = await Location.getCurrentPositionAsync({});
-                const userCoords = {
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude,
-                };
-                setUserLocation(userCoords);
-                setRegion({
-                    ...userCoords,
-                    latitudeDelta: INITIAL_DELTA,
-                    longitudeDelta: INITIAL_DELTA,
-                });
-            } catch {
-                setErrorMsg('Error al obtener la ubicación.');
+                console.log("MAPA (Efecto 1): Obteniendo ubicación...");
+                const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                const coords: Coords = { latitude: location.coords.latitude, longitude: location.coords.longitude };
+                if (isMounted) {
+                    console.log("MAPA (Efecto 1): Ubicación obtenida:", coords);
+                    setUserLocation(coords);
+                    // Solo centrar si el mapa no se ha movido
+                    if (mapRef.current && region?.latitude === COCHABAMBA_REGION.latitude) {
+                       console.log("MAPA (Efecto 1): Centrando mapa en ubicación inicial.");
+                       setRegion({ ...coords, latitudeDelta: INITIAL_DELTA, longitudeDelta: INITIAL_DELTA });
+                    //    mapRef.current.animateToRegion({ ...coords, latitudeDelta: INITIAL_DELTA, longitudeDelta: INITIAL_DELTA }, 500);
+                    }
+                }
+            } catch (error: any) {
+                console.error("MAPA (Efecto 1): Error:", error.message);
+                if (isMounted) setErrorMsg('Error al obtener la ubicación.');
+            } finally {
+                 if (isMounted) setIsLocationLoading(false);
             }
         })();
-    }, []);
+        return () => { isMounted = false };
+    }, []); // Solo al montar
 
-    // useEffect para llamar a la API y transformar los datos
+    // ------------------------------------
+    // EFECTO 2: Cargar Parqueos (con validación)
+    // ------------------------------------
     useEffect(() => {
-        const fetchAndTransformParqueos = async () => {
-            try {
-                const response = await axios.get<ParqueoApi[]>(API_URL);
-                const datosTransformados = response.data.map((p): ParqueoParaVista => {
-                    const totalPuntuacion = p.calificaciones.reduce((sum, cal) => sum + parseInt(cal.puntuacion, 10), 0);
-                    const ratingPromedio = p.calificaciones.length > 0 ? totalPuntuacion / p.calificaciones.length : 0;
-                    
-                    const primerHorario = p.horarios[0];
-                    const horarioStr = primerHorario ? `${primerHorario.diaSemana}: ${new Date(primerHorario.horaAbrir).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${new Date(primerHorario.horaCerrar).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'No disponible';
+         let isMounted = true;
+         const fetchAndTransformParqueos = async () => { /* ... (igual que antes, ya validaba coords) ... */
+             setIsLoadingApi(true);
+             console.log("MAPA (Efecto 2): Cargando parqueos...");
+             try {
+                const response = await axios.get<any[]>(API_URL);
+                const datosTransformados = response.data
+                    .map((p): ParqueoParaVista | null => {
+                        let latitud: number | undefined; let longitud: number | undefined;
+                        if (typeof p.latitud === 'number' && typeof p.longitud === 'number') {
+                            latitud = p.latitud; longitud = p.longitud;
+                        } else if (p.plazas?.[0] && typeof p.plazas[0].latitud === 'number' && typeof p.plazas[0].longitud === 'number') {
+                            latitud = p.plazas[0].latitud; longitud = p.plazas[0].longitud;
+                        }
+                        if (typeof latitud !== 'number' || typeof longitud !== 'number') return null; // Descartar
 
-                    return {
-                        id: p.id.toString(),
-                        nombre: p.nombre,
-                        latitud: p.latitud + (Math.random() - 0.5) * 0.0001,
-                        longitud: p.longitud + (Math.random() - 0.5) * 0.0001,
-                        rating: parseFloat(ratingPromedio.toFixed(1)),
-                        imageUri: `https://picsum.photos/seed/${p.id}/100/80`,
-                        horario: horarioStr,
-                        tarifa: '7 Bs/h',
-                        disponible: true,
-                    };
-                });
-                setParqueos(datosTransformados);
-            } catch (error) {
-                setErrorMsg("Error al conectar con el servidor de parqueos.");
-                console.error(error);
+                        const totalPuntuacion = (p.calificaciones || []).reduce((sum: number, cal: any) => sum + parseInt(cal.puntuacion || '0', 10), 0);
+                        const ratingPromedio = (p.calificaciones || []).length > 0 ? totalPuntuacion / p.calificaciones.length : 0;
+                        const primerHorario = (p.horarios || [])[0];
+                        let horarioStr = 'No disponible';
+                         if (primerHorario?.horaAbrir && primerHorario?.horaCerrar) {
+                             try { horarioStr = `${primerHorario.diaSemana}: ${new Date(primerHorario.horaAbrir).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${new Date(primerHorario.horaCerrar).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`; } catch (e) {}
+                        }
+                        const capacidadTotal = (p.capacidades || []).reduce((sum: number, c: any) => sum + (c.cantidad || 0), 0);
+                        const disponible = capacidadTotal > 0;
+
+                        return { id: String(p.id), nombre: p.nombre || '?', latitud, longitud, rating: parseFloat(ratingPromedio.toFixed(1)), imageUri: p.imagen_url || `https://picsum.photos/seed/${p.id}/100/80`, horario: horarioStr, tarifa: '7 Bs/h', disponible };
+                    })
+                    .filter((p): p is ParqueoParaVista => p !== null);
+
+                if (isMounted) {
+                    setParqueos(datosTransformados);
+                    console.log(`MAPA (Efecto 2): ${datosTransformados.length} parqueos VÁLIDOS cargados.`);
+                }
+            } catch (error: any) {
+                console.error("MAPA (Efecto 2): Error:", error.message);
+                if (isMounted) setErrorMsg("Error al conectar con el servidor.");
             } finally {
-                setIsLoadingApi(false);
+                if (isMounted) setIsLoadingApi(false);
             }
         };
-
         fetchAndTransformParqueos();
+        return () => { isMounted = false };
     }, []);
 
-    // 🆕 useEffect para manejar navegación desde otra pantalla
-    useEffect(() => {
-        if (params.targetLat && params.targetLng && params.showRoute === 'true' && userLocation) {
-            const targetLocation = {
-                latitude: parseFloat(params.targetLat),
-                longitude: parseFloat(params.targetLng)
-            };
+    // ------------------------------------
+// EFECTO 3: Manejar Ruta (OSRM) - CORREGIDO PARA ESPERAR userLocation
+// ------------------------------------
+useEffect(() => {
+    const { destLat, destLng, destNombre } = params;
 
-            // Buscar el parqueo en la lista
-            const parqueo = parqueos.find(
-                p => Math.abs(p.latitud - targetLocation.latitude) < 0.001 && 
-                     Math.abs(p.longitud - targetLocation.longitude) < 0.001
-            );
+    // Solo intenta trazar ruta si tenemos TODO (parámetros y userLocation)
+    if (destLat && destLng && destNombre && userLocation) {
+        const destCoords: Coords = { latitude: parseFloat(destLat), longitude: parseFloat(destLng) };
 
-            if (parqueo) {
-                setSelectedParking(parqueo);
-                // Trazar ruta automáticamente
-                fetchRoute(userLocation, targetLocation);
-                // Ajustar vista del mapa
-                mapRef.current?.fitToCoordinates(
-                    [userLocation, targetLocation],
-                    { edgePadding: { top: 100, right: 50, bottom: 300, left: 50 }, animated: true }
-                );
-            }
+        // Si ya se mostró destino evita recomputar
+        if (destination?.latitude === destCoords.latitude && destination?.longitude === destCoords.longitude) {
+            params.destLat = undefined; params.destLng = undefined; params.destNombre = undefined;
+            return;
         }
-    }, [params, userLocation, parqueos]);
 
-    // Función para obtener ruta con OSRM (sin API Key)
-    const fetchRoute = async (origin: { latitude: number; longitude: number }, destination: { latitude: number; longitude: number }) => {
-        setIsLoadingRoute(true);
-        try {
-            const url = `https://router.project-osrm.org/route/v1/driving/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=geojson`;
-            const response = await axios.get(url);
-            const coordinates = response.data.routes[0].geometry.coordinates.map((coord: number[]) => ({
-                latitude: coord[1],
-                longitude: coord[0]
-            }));
-            setRouteCoordinates(coordinates);
-            setShowDirections(true);
-        } catch (error: any) {
-            console.error('Error obteniendo ruta:', error.response?.data || error.message);
-            Alert.alert('Error', 'No se pudo trazar la ruta. Verifica tu conexión.');
-            setShowDirections(false);
-        } finally {
-            setIsLoadingRoute(false);
-        }
-    };
-
-    const handleZoom = (factor: number) => {
-        if (!region) return;
-        const newRegion: Region = {
-            ...region,
-            latitudeDelta: region.latitudeDelta * factor,
-            longitudeDelta: region.longitudeDelta * factor,
-        };
-        mapRef.current?.animateToRegion(newRegion, 300);
-    };
-
-    const handleMarkerPress = (parqueo: ParqueoParaVista) => {
-        setSelectedParking(parqueo);
-        setShowDirections(false);
-        setRouteCoordinates([]);
-        mapRef.current?.animateToRegion({
-            latitude: parqueo.latitud,
-            longitude: parqueo.longitud,
-            latitudeDelta: region?.latitudeDelta || INITIAL_DELTA,
-            longitudeDelta: region?.longitudeDelta || INITIAL_DELTA,
-        }, 500);
-    };
-
-    const handleCloseCard = () => {
+        setDestination(destCoords);
+        setDestinationName(destNombre);
         setSelectedParking(null);
-        setShowDirections(false);
         setRouteCoordinates([]);
-    };
+        params.destLat = undefined; params.destLng = undefined; params.destNombre = undefined;
 
-    const handleShowDirections = () => {
-        if (selectedParking && userLocation) {
-            fetchRoute(userLocation, { 
-                latitude: selectedParking.latitud, 
-                longitude: selectedParking.longitud 
-            });
-            
-            mapRef.current?.fitToCoordinates(
-                [userLocation, { latitude: selectedParking.latitud, longitude: selectedParking.longitud }],
-                { edgePadding: { top: 100, right: 50, bottom: 300, left: 50 }, animated: true }
-            );
+        const fetchRouteOSRM = async () => {
+            setIsLoadingRoute(true);
+            try {
+                const url = `${OSRM_API_URL}${userLocation.longitude},${userLocation.latitude};${destCoords.longitude},${destCoords.latitude}?overview=full&geometries=geojson`;
+                const response = await axios.get(url);
+                const route = response.data.routes[0];
+                if (route?.geometry?.coordinates) {
+                    const newRouteCoords: Coords[] = route.geometry.coordinates.map((coord: number[]) => ({ latitude: coord[1], longitude: coord[0] }));
+                    setRouteCoordinates(newRouteCoords);
+                    if (mapRef.current) {
+                        mapRef.current.fitToCoordinates([userLocation, destCoords], { edgePadding: { top: 150, right: 50, bottom: 80, left: 50 }, animated: true });
+                    }
+                } else {
+                    Alert.alert("Ruta no disponible", `No se encontró ruta para ${destNombre}.`);
+                }
+            } catch (error: any) {
+                console.error("MAPA (fetchRouteOSRM): Error:", error.message);
+                Alert.alert("Error de Ruteo", "No se pudo calcular la ruta (OSRM).");
+            } finally {
+                setIsLoadingRoute(false);
+            }
+        };
+
+        fetchRouteOSRM();
+    }
+    // Si faltan coords, no hace nada
+}, [params.destLat, params.destLng, params.destNombre, userLocation]);
+
+    // --- Funciones de Interacción ---
+    const handleZoom = (factor: number) => { /* ... (igual) ... */
+         if (!region) return;
+         const newRegion: Region = { ...region, latitudeDelta: region.latitudeDelta * factor, longitudeDelta: region.longitudeDelta * factor };
+         mapRef.current?.animateToRegion(newRegion, 300);
+    };
+    const handleMarkerPress = (parqueo: ParqueoParaVista) => { /* ... (igual) ... */
+        if (destination) return;
+        setSelectedParking(parqueo);
+        if (region && mapRef.current) {
+            mapRef.current.animateToRegion({ latitude: parqueo.latitud, longitude: parqueo.longitud, latitudeDelta: region.latitudeDelta, longitudeDelta: region.longitudeDelta }, 500);
         }
     };
+    const handleClearSelection = () => { /* ... (igual) ... */
+         console.log("MAPA: Limpiando selección/ruta.");
+         setSelectedParking(null);
+         setDestination(null);
+         setDestinationName(null);
+         setRouteCoordinates([]);
+         if (userLocation && mapRef.current && region) {
+              mapRef.current.animateToRegion({ ...userLocation, latitudeDelta: INITIAL_DELTA, longitudeDelta: INITIAL_DELTA }, 300);
+         }
+    };
 
-    if (errorMsg) {
-        return (
-            <View className="flex-1 items-center justify-center bg-red-50 p-4">
-                <Text className="text-lg font-bold text-red-700 text-center">{errorMsg}</Text>
-            </View>
-        );
-    }
+    // --- Vistas de Carga y Error ---
+     if (errorMsg && !isLoadingApi && !isLocationLoading) { /* ... (igual) ... */
+         return (<View className="flex-1 items-center justify-center bg-red-100 p-4"><Feather name="alert-triangle" size={40} color="#b91c1c" /><Text className="text-lg font-bold text-red-800 text-center mt-4">{errorMsg}</Text></View>);
+     }
+     if (isLocationLoading || isLoadingApi || !region) { /* ... (igual) ... */
+          let loadingText = "Cargando mapa...";
+         if (isLocationLoading || !userLocation) loadingText = "Obteniendo tu ubicación...";
+         else if (isLoadingApi) loadingText = "Cargando parqueos cercanos...";
+         return (<View className="flex-1 items-center justify-center bg-gray-50"><ActivityIndicator size="large" color="#4F46E5" /><Text className="mt-3 text-base text-gray-500">{loadingText}</Text></View>);
+     }
 
-    if (!region || isLoadingApi) {
-        return (
-            <View className="flex-1 items-center justify-center bg-gray-100">
-                <ActivityIndicator size="large" color="#4F46E5" />
-                <Text className="mt-2 text-base text-gray-500">Cargando mapa y parqueos...</Text>
-            </View>
-        );
-    }
-
+    // --- Render Principal ---
     return (
-        <View className="flex-1"> 
-            <View style={StyleSheet.absoluteFillObject}> 
-                <MapView
-                    ref={mapRef}
-                    className="flex-1" 
-                    region={region}
-                    showsUserLocation
-                    onRegionChangeComplete={setRegion}
-                    onPress={handleCloseCard} 
-                >
-                    {parqueos.map((parqueo) => (
-                        <Marker
-                            key={parqueo.id}
-                            coordinate={{ latitude: parqueo.latitud, longitude: parqueo.longitud }}
-                            title={parqueo.nombre}
-                            pinColor={parqueo.disponible ? 'green' : 'red'}
-                            onPress={() => handleMarkerPress(parqueo)}
-                        />
-                    ))}
-
-                    {showDirections && routeCoordinates.length > 0 && (
-                        <Polyline
-                            coordinates={routeCoordinates}
-                            strokeWidth={4}
-                            strokeColor="#4F46E5"
-                        />
-                    )}
-                </MapView>
-            </View>
-
-            <View 
-                className="absolute bottom-6 right-6 z-50 flex-col space-y-3"
-                style={{ elevation: 50 }} 
+        <View className="flex-1">
+            <MapView
+                ref={mapRef}
+                provider={PROVIDER_GOOGLE}
+                style={StyleSheet.absoluteFillObject}
+                initialRegion={region}
+                showsUserLocation={true}
+                showsMyLocationButton={false} // Quitamos botón nativo
+                onRegionChangeComplete={setRegion} // Actualiza zoom/centro
+                onPress={handleClearSelection} // Limpia al tocar fondo
+                // mapPadding={{ bottom: Platform.select({ ios: selectedParking ? 180 : (destination ? 90 : 30), android: selectedParking ? 160 : (destination ? 90 : 30) }) }} // Ajustar padding dinámico
             >
-                <TouchableOpacity onPress={() => handleZoom(0.8)} className="w-14 h-14 bg-white rounded-full items-center justify-center shadow-lg active:bg-gray-200">
-                    <Feather name="plus" size={28} color="#4b5563" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleZoom(1.25)} className="w-14 h-14 bg-white rounded-full items-center justify-center shadow-lg active:bg-gray-200">
-                    <Feather name="minus" size={28} color="#4b5563" />
-                </TouchableOpacity>
-            </View>
-            
-            {selectedParking && (
-                <ParkeoPopup 
-                    details={selectedParking}
-                    onClose={handleCloseCard}
-                    onShowDirections={handleShowDirections}
-                    showingDirections={showDirections || isLoadingRoute}
-                />
+                {/* Marcadores Parqueos */}
+                {parqueos.map((parqueo) => (
+                    <Marker
+                        key={`parqueo-${parqueo.id}`}
+                        coordinate={{ latitude: parqueo.latitud, longitude: parqueo.longitud }}
+                        title={parqueo.nombre}
+                        onPress={destination ? undefined : () => handleMarkerPress(parqueo)} // Desactivar onPress si hay ruta
+                        opacity={(destination && (destination.latitude !== parqueo.latitud || destination.longitude !== parqueo.longitud)) ? 0.5 : 1.0} // Atenuar otros
+                        zIndex={0} // Por defecto
+                    >
+                        <Image source={{ uri: parqueo.disponible ? MARKER_DISPONIBLE : MARKER_LLENO }} style={{ width: 35, height: 35 }} resizeMode="contain" />
+                    </Marker>
+                ))}
+
+                {/* Ruta */}
+                {routeCoordinates.length > 0 && (
+                    <Polyline coordinates={routeCoordinates} strokeWidth={5} strokeColor="#3b82f6" lineCap="round" zIndex={1} />
+                )}
+
+                 {/* Marcador Destino */}
+                 {destination && (
+                    <Marker coordinate={destination} title={destinationName || "Destino"} pinColor="blue" zIndex={2} />
+                 )}
+            </MapView>
+
+             {/* Indicador Carga RUTA */}
+            {isLoadingRoute && (
+                <View className="absolute top-16 self-center bg-white/90 p-3 rounded-lg shadow-md flex-row items-center z-20 elevation-4">
+                     <ActivityIndicator size="small" color="#3b82f6" />
+                     <Text className="text-blue-600 text-sm ml-2 font-medium">Calculando ruta...</Text>
+                </View>
             )}
 
-            {isLoadingRoute && (
-                <View className="absolute top-20 self-center bg-white px-4 py-2 rounded-full shadow-lg flex-row items-center">
-                    <ActivityIndicator size="small" color="#4F46E5" />
-                    <Text className="text-sm text-gray-600 ml-2">Calculando ruta...</Text>
-                </View>
+            {/* Controles Zoom */}
+            <View className="absolute bottom-24 right-5 z-10 flex-col gap-3">
+                <TouchableOpacity onPress={() => handleZoom(0.7)} className="w-12 h-12 bg-white rounded-full items-center justify-center shadow-lg active:bg-gray-200 elevation-5">
+                    <Feather name="plus" size={24} color="#4b5563" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleZoom(1.4)} className="w-12 h-12 bg-white rounded-full items-center justify-center shadow-lg active:bg-gray-200 elevation-5">
+                    <Feather name="minus" size={24} color="#4b5563" />
+                </TouchableOpacity>
+            </View>
+
+            {/* Botón LIMPIAR RUTA */}
+            {destination && (
+                <TouchableOpacity onPress={handleClearSelection} className="absolute bottom-5 left-5 z-10 bg-red-600 px-4 py-3 rounded-xl shadow-lg active:bg-red-700 flex-row items-center gap-1 elevation-5">
+                    <Feather name="x-circle" size={16} color="white"/>
+                    <Text className="text-white font-bold text-sm">Limpiar Ruta</Text>
+                </TouchableOpacity>
+            )}
+
+            {/* Popup Info */}
+            {selectedParking && !destination && (
+                <ParkeoPopup details={selectedParking} onClose={handleClearSelection} />
             )}
         </View>
     );
 }
+
+// Estilos Nativos (solo si es necesario, como para elevation en Android)
+ 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert} from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 
@@ -128,42 +128,38 @@ export default function DetalleParqueoScreen() {
         }, [parqueoId])
     );
 
-    // 🆕 FUNCIÓN PARA NAVEGAR AL MAPA CON LA UBICACIÓN DEL PARQUEO
-    const handleNavigateToMap = () => {
-        if (!data) return;
-        
-        console.log(`Navegando al mapa para mostrar: ${data.nombre} (Lat: ${data.latitud}, Lng: ${data.longitud})`);
-        
-        // Navega a la tab del mapa y pasa las coordenadas como parámetros
-        router.push({
-            pathname: '/(tabs)/Mapa' as any,
-            params: {
-                targetLat: data.latitud.toString(),
-                targetLng: data.longitud.toString(),
-                targetName: data.nombre,
-                showRoute: 'true' // Indica que debe mostrar la ruta
-            }
-        });
-    };
 
     // --- FUNCIÓN PARA NAVEGAR A RESERVA ---
+    // --- FUNCIÓN PARA NAVEGAR A RESERVA (CON VALIDACIÓN DE COORDENADAS) ---
     const handleNavigateToReserva = () => {
-        if (!data) return;
+        // 1. Verificar que 'data' existe y tiene coordenadas válidas
+        if (!data || typeof data.latitud !== 'number' || typeof data.longitud !== 'number') {
+            console.error("handleNavigateToReserva: Faltan datos o coordenadas válidas en 'data'.", data);
+            Alert.alert("Error", "No se pueden obtener los datos completos del parqueo para reservar.");
+            return; // No continuar si faltan datos
+        }
 
         const capacidadAutos = data.capacidades?.find(c => c.tipoVehiculo.nombre.toLowerCase() === 'autos')?.cantidad || 0;
         const capacidadMotos = data.capacidades?.find(c => c.tipoVehiculo.nombre.toLowerCase() === 'motos')?.cantidad || 0;
 
-        console.log(`Navegando a Reserva para: ${data.nombre} (ID: ${data.id})`);
+        // 2. Preparar parámetros (asegurándonos de convertir a string)
+        const paramsToPass = {
+            parqueoId: data.id.toString(),
+            parqueoNombre: data.nombre || 'Parqueo Desconocido', // Fallback por si acaso
+            tarifaAuto: (data.tarifa_auto ?? DEFAULT_TARIFA_AUTO).toString(),
+            tarifaMoto: (data.tarifa_moto ?? DEFAULT_TARIFA_MOTO).toString(),
+            capacidadAutos: capacidadAutos.toString(),
+            capacidadMotos: capacidadMotos.toString(),
+            parqueoLat: data.latitud.toString(), // Convertir número a string
+            parqueoLng: data.longitud.toString(), // Convertir número a string
+        };
+
+        console.log(`[id].tsx: Navegando a Reserva con params:`, paramsToPass);
+
+        // 3. Navegar
         router.push({
-            pathname: '/(tabs)/reserva' as any,
-            params: {
-              parqueoId: data.id.toString(),
-              parqueoNombre: data.nombre,
-              tarifaAuto: (data.tarifa_auto ?? DEFAULT_TARIFA_AUTO).toString(),
-              tarifaMoto: (data.tarifa_moto ?? DEFAULT_TARIFA_MOTO).toString(),
-              capacidadAutos: capacidadAutos.toString(),
-              capacidadMotos: capacidadMotos.toString()
-            }
+            pathname: '/reserva' as any, // Asumiendo que está en app/reserva.tsx
+            params: paramsToPass
         });
     };
 
@@ -172,7 +168,7 @@ export default function DetalleParqueoScreen() {
         return (
             <View className="flex-1 items-center justify-center bg-gray-100 dark:bg-gray-800">
                 <ActivityIndicator size="large" color="#4F46E5" />
-                <Text className="mt-4 text-base text-gray-600 dark:text-gray-300">Buscando parqueo (ID: {parqueoId})...</Text>
+                <Text className="mt-4 text-base text-gray-600 dark:text-gray-300">Cargando información de parqueo...</Text>
             </View>
          );
     }
@@ -217,7 +213,7 @@ export default function DetalleParqueoScreen() {
             <View className="p-4">
                 {/* Encabezado */}
                 <Text className="text-3xl font-extrabold text-gray-900 dark:text-white mb-1">
-                    {data.nombre} (ID: {data.id})
+                    {data.nombre} 
                 </Text>
                 {/* Dirección */}
                 <View className="flex-row items-center mb-1">
@@ -233,14 +229,7 @@ export default function DetalleParqueoScreen() {
 
                 {/* Fila de Acciones */}
                 <View className="flex-row justify-between border-b border-gray-200 dark:border-gray-700 pb-4 mb-4">
-                    {/* 🆕 Botón de Indicaciones FUNCIONAL */}
-                    <TouchableOpacity 
-                        className="items-center w-1/5 active:opacity-70"
-                        onPress={handleNavigateToMap}
-                    >
-                        <Feather name="navigation" size={24} color="#007BFF" />
-                        <Text className="text-xs text-blue-600 dark:text-blue-400 mt-1">Indicaciones</Text>
-                    </TouchableOpacity>
+                     
                     
                     {/* Botón de Guardar */}
                     <TouchableOpacity className="items-center w-1/5 active:opacity-70">

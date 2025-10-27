@@ -1,5 +1,4 @@
-// Archivo: app/pagoTarjeta.tsx (Nueva pantalla)
-// Simula el pago con Tarjeta
+// Archivo: app/PagoTarjeta.tsx (ACTUALIZADO para redirigir al mapa con ruta)
 
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
@@ -8,35 +7,35 @@ import { Feather } from '@expo/vector-icons';
 
 export default function PagoTarjetaScreen() {
     const router = useRouter();
-    // Recibimos los datos de la reserva
+    // Recibimos los datos, incluyendo Lat/Lng
     const reservaData = useLocalSearchParams<{
         parqueoNombre: string;
         costoTotal: string;
-        // ...otros datos
         plazaId: string;
         matricula: string;
-        fechaInicioISO: string;
-        fechaFinISO: string;
-        metodoPago: string;
+        // --- 👇 Necesitamos estos para la ruta ---
+        parqueoLat?: string;
+        parqueoLng?: string;
+        // (Otros datos si los pasaste)
+        // fechaInicioISO: string;
+        // fechaFinISO: string;
+        // metodoPago: string;
     }>();
 
     const [cardNumber, setCardNumber] = useState('');
     const [expiry, setExpiry] = useState(''); // MM/AA
     const [cvv, setCvv] = useState('');
-    const [isProcessing, setIsProcessing] = useState(false); // Estado para simular carga
+    const [isProcessing, setIsProcessing] = useState(false);
 
-    // Función simple para formatear MM/AA
     const formatExpiry = (text: string) => {
-        const cleaned = text.replace(/\D/g, ''); // Quita no números
-        if (cleaned.length <= 2) {
-            return cleaned;
-        }
+        const cleaned = text.replace(/\D/g, '');
+        if (cleaned.length <= 2) return cleaned;
         return `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}`;
     };
 
     const handlePagar = () => {
-        // Validaciones simples (solo para simulación)
-        if (!cardNumber || cardNumber.replace(/\s/g, '').length < 14) { // Muy básico
+        // --- Validaciones ---
+        if (!cardNumber || cardNumber.replace(/\s/g, '').length < 14) {
             Alert.alert("Error", "Ingresa un número de tarjeta válido.");
             return;
         }
@@ -48,38 +47,55 @@ export default function PagoTarjetaScreen() {
             Alert.alert("Error", "Ingresa el CVV (3 o 4 dígitos).");
             return;
         }
+        // --- Fin Validaciones ---
 
         setIsProcessing(true);
         console.log("PAGO TARJETA: Iniciando procesamiento simulado...");
 
-        // Simulamos una demora de 3 segundos
         setTimeout(() => {
             console.log("PAGO TARJETA: Procesamiento simulado completo.");
             setIsProcessing(false);
 
             // === SIMULACIÓN DE ÉXITO ===
-            // Aquí iría tu lógica real para procesar el pago con una pasarela
             Alert.alert(
                 "¡Pago con Tarjeta Exitoso! (Simulado)",
                 `Reserva Confirmada:\nParqueo: ${reservaData.parqueoNombre}\nPlaza: ${reservaData.plazaId}\nVehículo: ${reservaData.matricula}\nCosto: ${reservaData.costoTotal} Bs`,
                  [{
-                    text: "Finalizar", onPress: () => {
-                        // Volvemos DOS pantallas atrás (Tarjeta -> Reserva -> Detalle)
-                        if (router.canGoBack()) {
-                            router.back();
-                            if (router.canGoBack()) {
-                                router.back();
-                            }
+                    text: "Ver Ruta en Mapa", // Cambiamos texto
+                    onPress: () => {
+                        console.log("PAGO TARJETA: Pago exitoso. Navegando al mapa con indicaciones...");
+
+                        // Verificamos si recibimos las coordenadas
+                        if (!reservaData.parqueoLat || !reservaData.parqueoLng) {
+                            console.error("Error: No se recibieron coordenadas Lat/Lng desde la pantalla de reserva.");
+                            Alert.alert("Error", "No se pudieron obtener las coordenadas para mostrar la ruta.", [
+                                { text: "OK", onPress: () => {
+                                    // Fallback: Volver dos pantallas si no hay coords
+                                    if(router.canGoBack()) router.back(); // Sale de PagoTarjeta
+                                    if(router.canGoBack()) router.back(); // Sale de Reserva
+                                }}
+                            ]);
+                            return;
                         }
+
+                        // --- 👇 NAVEGACIÓN AL MAPA CON PARÁMETROS 👇 ---
+                        router.push({
+                           pathname: '/(tabs)/Mapa' as any, // Ruta a tu pantalla de mapa
+                           params: {
+                             destLat: reservaData.parqueoLat,
+                             destLng: reservaData.parqueoLng,
+                             destNombre: reservaData.parqueoNombre,
+                           }
+                       });
+                       // --- Fin Navegación ---
                     }
                 }]
             );
-        }, 3000); // 3 segundos de espera simulada
+        }, 3000);
     };
 
     return (
         <View className="flex-1 justify-center bg-gray-100 p-5">
-             {/* Botón Volver */}
              <TouchableOpacity onPress={() => router.back()} className="absolute top-10 left-5 z-10 p-2">
                  <Feather name="x" size={28} color="#555" />
             </TouchableOpacity>
@@ -98,7 +114,7 @@ export default function PagoTarjetaScreen() {
                         keyboardType="numeric"
                         value={cardNumber}
                         onChangeText={setCardNumber}
-                        maxLength={19} // 16 números + 3 espacios
+                        maxLength={19}
                         placeholderTextColor="#9ca3af"
                     />
                 </View>
@@ -122,7 +138,7 @@ export default function PagoTarjetaScreen() {
                             className="border border-gray-300 rounded-lg px-4 py-3 text-base bg-white shadow-sm focus:border-blue-500"
                             placeholder="123"
                             keyboardType="numeric"
-                            secureTextEntry // Oculta el CVV
+                            secureTextEntry
                             value={cvv}
                             onChangeText={setCvv}
                             maxLength={4}
@@ -137,6 +153,7 @@ export default function PagoTarjetaScreen() {
                 className={`w-full py-4 rounded-lg items-center shadow-lg ${isProcessing ? 'bg-gray-400' : 'bg-blue-600 active:bg-blue-700'}`}
                 onPress={handlePagar}
                 disabled={isProcessing}
+                activeOpacity={0.8}
             >
                 {isProcessing ? (
                     <ActivityIndicator size="small" color="#ffffff" />

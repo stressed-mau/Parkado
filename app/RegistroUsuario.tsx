@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { z } from "zod";
-import Logo from "../../assets/Logo";
+import Logo from "../assets/Logo";
 
 // === SCHEMA DE VALIDACIÓN ===
 const registerSchema = z.object({

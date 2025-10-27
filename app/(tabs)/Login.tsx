@@ -12,7 +12,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import Logo from "../assets/Logo";
+import Logo from "../../assets/Logo";
 
 export default function LoginUsuario() {
   const router = useRouter();
@@ -141,7 +141,7 @@ export default function LoginUsuario() {
 
         {/* LINK A REGISTRO */}
         <TouchableOpacity
-          onPress={() => router.push("/(tabs)/RegistroUsuario")}
+          onPress={() => router.push("/RegistroUsuario")}
           className="mt-6"
         >
           <Text className="text-center text-[#B2A83F] font-semibold">

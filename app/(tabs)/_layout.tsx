@@ -25,10 +25,10 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="RegistroUsuario"
+        name="Login"
         options={{
-          title: 'Registro',
-          tabBarIcon: ({ color }) => <Feather name="user-plus" size={24} color={color} />,
+          title: 'Perfil',
+          tabBarIcon: ({ color }) => <Feather name="user" size={24} color={color} />,
         }}
       />
     </Tabs>

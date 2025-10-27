@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert} from 'react-native';
+import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 
@@ -57,7 +57,7 @@ const RatingStars = ({ rating }: { rating: number }) => {
     const fullStars = Math.floor(rating);
     const emptyStars = 5 - Math.ceil(rating);
     return (
-        <Text className="text-yellow-500">
+        <Text className="text-[#F2BD2B]">
             {'★'.repeat(fullStars)}
             {'☆'.repeat(emptyStars)}
         </Text>
@@ -128,37 +128,31 @@ export default function DetalleParqueoScreen() {
         }, [parqueoId])
     );
 
-
-    // --- FUNCIÓN PARA NAVEGAR A RESERVA ---
-    // --- FUNCIÓN PARA NAVEGAR A RESERVA (CON VALIDACIÓN DE COORDENADAS) ---
     const handleNavigateToReserva = () => {
-        // 1. Verificar que 'data' existe y tiene coordenadas válidas
         if (!data || typeof data.latitud !== 'number' || typeof data.longitud !== 'number') {
             console.error("handleNavigateToReserva: Faltan datos o coordenadas válidas en 'data'.", data);
             Alert.alert("Error", "No se pueden obtener los datos completos del parqueo para reservar.");
-            return; // No continuar si faltan datos
+            return;
         }
 
         const capacidadAutos = data.capacidades?.find(c => c.tipoVehiculo.nombre.toLowerCase() === 'autos')?.cantidad || 0;
         const capacidadMotos = data.capacidades?.find(c => c.tipoVehiculo.nombre.toLowerCase() === 'motos')?.cantidad || 0;
 
-        // 2. Preparar parámetros (asegurándonos de convertir a string)
         const paramsToPass = {
             parqueoId: data.id.toString(),
-            parqueoNombre: data.nombre || 'Parqueo Desconocido', // Fallback por si acaso
+            parqueoNombre: data.nombre || 'Parqueo Desconocido',
             tarifaAuto: (data.tarifa_auto ?? DEFAULT_TARIFA_AUTO).toString(),
             tarifaMoto: (data.tarifa_moto ?? DEFAULT_TARIFA_MOTO).toString(),
             capacidadAutos: capacidadAutos.toString(),
             capacidadMotos: capacidadMotos.toString(),
-            parqueoLat: data.latitud.toString(), // Convertir número a string
-            parqueoLng: data.longitud.toString(), // Convertir número a string
+            parqueoLat: data.latitud.toString(),
+            parqueoLng: data.longitud.toString(),
         };
 
         console.log(`[id].tsx: Navegando a Reserva con params:`, paramsToPass);
 
-        // 3. Navegar
         router.push({
-            pathname: '/reserva' as any, // Asumiendo que está en app/reserva.tsx
+            pathname: '/reserva' as any,
             params: paramsToPass
         });
     };
@@ -166,37 +160,37 @@ export default function DetalleParqueoScreen() {
     // --- Vistas de Carga y Error ---
     if (isLoading) {
         return (
-            <View className="flex-1 items-center justify-center bg-gray-100 dark:bg-gray-800">
-                <ActivityIndicator size="large" color="#4F46E5" />
-                <Text className="mt-4 text-base text-gray-600 dark:text-gray-300">Cargando información de parqueo...</Text>
+            <View className="flex-1 items-center justify-center bg-[#F6EEE4]">
+                <ActivityIndicator size="large" color="#FD721D" />
+                <Text className="mt-4 text-base text-black">Cargando información de parqueo...</Text>
             </View>
-         );
+        );
     }
     if (error) {
         return (
-            <View className="flex-1 items-center justify-center bg-red-50 dark:bg-red-900 p-8">
-                <Text className="text-xl font-bold text-red-700 dark:text-red-300 text-center">Error:</Text>
-                <Text className="text-base text-red-600 dark:text-red-200 text-center mt-2">{error}</Text>
-                <TouchableOpacity onPress={() => router.back()} className="mt-6 bg-red-600 px-4 py-2 rounded-lg">
-                    <Text className="text-white font-semibold">Volver</Text>
+            <View className="flex-1 items-center justify-center bg-[#F6EEE4] p-8">
+                <Text className="text-xl font-bold text-[#FD721D] text-center">Error:</Text>
+                <Text className="text-base text-black text-center mt-2">{error}</Text>
+                <TouchableOpacity onPress={() => router.back()} className="mt-6 bg-[#FD721D] px-4 py-2 rounded-lg">
+                    <Text className="text-[#F6EEE4] font-semibold">Volver</Text>
                 </TouchableOpacity>
             </View>
         );
     }
     if (!data) {
-       return (
-            <View className="flex-1 items-center justify-center bg-gray-100 p-8">
-                <Text className="text-xl font-bold text-gray-700 text-center">Datos no disponibles.</Text>
-                <TouchableOpacity onPress={() => router.back()} className="mt-6 bg-gray-500 px-4 py-2 rounded-lg">
-                    <Text className="text-white font-semibold">Volver</Text>
+        return (
+            <View className="flex-1 items-center justify-center bg-[#F6EEE4] p-8">
+                <Text className="text-xl font-bold text-black text-center">Datos no disponibles.</Text>
+                <TouchableOpacity onPress={() => router.back()} className="mt-6 bg-[#7BB5CB] px-4 py-2 rounded-lg">
+                    <Text className="text-[#F6EEE4] font-semibold">Volver</Text>
                 </TouchableOpacity>
             </View>
-       );
+        );
     }
 
     // --- Render Principal ---
     return (
-        <ScrollView className="flex-1 bg-white dark:bg-gray-900">
+        <ScrollView className="flex-1 bg-[#F6EEE4]">
             {/* Contenedor de Imagen */}
             <View className="w-full h-64 overflow-hidden relative">
                 <Image
@@ -204,7 +198,7 @@ export default function DetalleParqueoScreen() {
                     className="w-full h-full"
                     resizeMode="cover"
                 />
-                <TouchableOpacity onPress={() => router.back()} className="absolute top-12 left-4 bg-black/50 p-2 rounded-full active:opacity-70">
+                <TouchableOpacity onPress={() => router.back()} className="absolute top-12 left-4 bg-black/50 p-2 rounded-full">
                     <Feather name="arrow-left" size={24} color="white" />
                 </TouchableOpacity>
             </View>
@@ -212,46 +206,52 @@ export default function DetalleParqueoScreen() {
             {/* Contenido Principal */}
             <View className="p-4">
                 {/* Encabezado */}
-                <Text className="text-3xl font-extrabold text-gray-900 dark:text-white mb-1">
-                    {data.nombre} 
+                <Text className="text-3xl font-bold text-black mb-1">
+                    {data.nombre}
                 </Text>
                 {/* Dirección */}
                 <View className="flex-row items-center mb-1">
-                    <Feather name="map-pin" size={16} color="#7BB3CD" />
-                    <Text className="text-base text-gray-500 dark:text-gray-400 ml-2"> {data.direccion} ({data.tipoLugar})</Text>
+                    <Feather name="map-pin" size={16} color="#7BB5CB" />
+                    <Text className="text-sm text-black ml-2">
+                        {data.direccion} ({data.tipoLugar})
+                    </Text>
                 </View>
                 {/* Rating */}
                 <View className="flex-row items-center mb-4">
-                    <Text className="text-xl font-bold text-gray-800 dark:text-gray-200 mr-2">{averageRating.toFixed(1)} </Text>
+                    <Text className="text-xl font-bold text-black mr-2">
+                        {averageRating.toFixed(1)}
+                    </Text>
                     <RatingStars rating={averageRating} />
-                    <Text className="text-sm text-gray-500 ml-2"> ({reviewCount} opiniones)</Text>
+                    <Text className="text-xs text-black ml-2">
+                        ({reviewCount} opiniones)
+                    </Text>
                 </View>
 
                 {/* Fila de Acciones */}
-                <View className="flex-row justify-between border-b border-gray-200 dark:border-gray-700 pb-4 mb-4">
-                     
-                    
+                <View className="flex-row justify-between border-b border-black pb-4 mb-4">
                     {/* Botón de Guardar */}
-                    <TouchableOpacity className="items-center w-1/5 active:opacity-70">
-                        <Feather name="bookmark" size={24} color="#007BFF" />
-                        <Text className="text-xs text-blue-600 dark:text-blue-400 mt-1">Guardar</Text>
+                    <TouchableOpacity className="items-center w-1/5">
+                        <Feather name="bookmark" size={24} color="#FD721D" />
+                        <Text className="text-xs text-[#FD721D] mt-1">Guardar</Text>
                     </TouchableOpacity>
-                    
+
                     {/* BOTÓN RESERVAR */}
-                    <TouchableOpacity 
-                        className="items-center justify-center w-[35%] active:opacity-70 bg-green-500 rounded-lg py-2" 
+                    <TouchableOpacity
+                        className="items-center justify-center w-2/5 bg-[#FD721D] rounded-lg py-2"
                         onPress={handleNavigateToReserva}
                     >
-                        <Text className="text-sm font-bold text-white">RESERVAR</Text>
+                        <Text className="text-sm font-bold text-[#F6EEE4]">RESERVAR</Text>
                     </TouchableOpacity>
                 </View>
 
-                 {/* Sección de Descripción General */}
-                <Text className="text-xl font-bold text-gray-900 dark:text-white mb-3">Descripción general</Text>
-                <Text className="text-base text-gray-700 dark:text-gray-300 mb-4 leading-normal">{data.descripcion || "No hay descripción disponible."}</Text>
+                {/* Sección de Descripción General */}
+                <Text className="text-xl font-bold text-black mb-3">Descripción general</Text>
+                <Text className="text-sm text-black mb-4 leading-5">
+                    {data.descripcion || "No hay descripción disponible."}
+                </Text>
 
                 {/* Sección de Horarios */}
-                <Text className="text-xl font-bold text-gray-900 dark:text-white mb-3">Horarios de Atención</Text>
+                <Text className="text-xl font-bold text-black mb-3">Horarios de Atención</Text>
                 {ALL_DAYS.map((day, index) => {
                     const horarioDia = data.horarios?.find(h => h.diaSemana.toLowerCase() === day);
                     const esCerrado = !horarioDia || horarioDia.esCerrado;
@@ -260,43 +260,48 @@ export default function DetalleParqueoScreen() {
                         : 'Cerrado';
                     return (
                         <View key={index} className="flex-row items-center mb-1">
-                            <Feather name="calendar" size={16} color={esCerrado ? '#EF4444' : '#10B981'} />
-                            <Text className="text-base text-gray-700 dark:text-gray-300 ml-3 font-semibold w-20">{day.charAt(0).toUpperCase() + day.slice(1)}:</Text>
-                            <Text className={`text-base ml-2 ${esCerrado ? 'text-red-600 font-bold' : 'text-gray-700 dark:text-gray-300'}`}>{horarioTexto}</Text>
+                            <Feather name="calendar" size={16} color={esCerrado ? '#FD721D' : '#FD721D'} />
+                            <Text className="text-sm text-black ml-3 font-semibold w-20">
+                                {day.charAt(0).toUpperCase() + day.slice(1)}:
+                            </Text>
+                            <Text className={`text-sm ml-2 ${esCerrado ? ' font-bold' : 'text-black'}`}>
+                                {horarioTexto}
+                            </Text>
                         </View>
                     );
                 })}
 
                 {/* Sección de Capacidades */}
-                <Text className="text-xl font-bold text-gray-900 dark:text-white mt-4 mb-3">Capacidades y Espacios</Text>
+                <Text className="text-xl font-bold text-black mt-4 mb-3">Capacidades y Espacios</Text>
                 <View className="flex-row flex-wrap justify-between">
                     {data.capacidades?.map((c, index) => (
-                        <View key={index} className="w-[48%] bg-gray-100 dark:bg-gray-700 p-3 rounded-lg mb-2 flex-row items-center">
-                            <FontAwesome5 name={c.tipoVehiculo.nombre.toLowerCase() === 'motos' ? 'motorcycle' : 'car'} size={24} color="#4F46E5" />
+                        <View key={index} className="w-[48%] bg-[#7BB5CB] p-3 rounded-lg mb-2 flex-row items-center">
+                            <FontAwesome5 name={c.tipoVehiculo.nombre.toLowerCase() === 'motos' ? 'motorcycle' : 'car'} size={24} color="#F6EEE4" />
                             <View className="ml-3">
-                                <Text className="text-xs font-semibold text-gray-700 dark:text-gray-300">{c.tipoVehiculo.nombre}</Text>
-                                <Text className="text-xl font-bold text-gray-900 dark:text-white">{c.cantidad}</Text>
+                                <Text className="text-xs font-semibold text-black">{c.tipoVehiculo.nombre}</Text>
+                                <Text className="text-xl font-bold text-black">{c.cantidad}</Text>
                             </View>
                         </View>
                     ))}
                 </View>
 
                 {/* Sección de Servicios Clave */}
-                <Text className="text-xl font-bold text-gray-900 dark:text-white mt-4 mb-3">Servicios Adicionales</Text>
+                <Text className="text-xl font-bold text-black mt-4 mb-3">Servicios Adicionales</Text>
                 <View className="flex-row flex-wrap gap-2">
                     {data.servicios?.filter(s => s.estado).map((s, index) => (
-                        <View key={index} className="flex-row items-center bg-gray-100 dark:bg-gray-700 rounded-full px-3 py-1">
-                            <Feather name="check" size={14} color="#10B981" />
-                            <Text className="text-sm text-gray-700 dark:text-gray-300 ml-1">{s.servicio.nombre}</Text>
+                        <View key={index} className="flex-row items-center bg-[#7BB5CB] rounded-full px-3 py-1">
+                            <Feather name="check" size={14} color="#F6EEE4" />
+                            <Text className="text-sm text-black ml-1">{s.servicio.nombre}</Text>
                         </View>
                     ))}
                 </View>
 
-                {/* Sección de Descripción Adicional */}
-                <Text className="text-xl font-bold text-gray-900 dark:text-white mt-4 mb-3">Información Extra</Text>
-                <Text className="text-base text-gray-700 dark:text-gray-300 mb-4 leading-normal">{data.descripcion || "No hay descripción disponible."}</Text>
-
+                {/* Sección de Información Extra */}
+                <Text className="text-xl font-bold text-black mt-4 mb-3">Información Extra</Text>
+                <Text className="text-sm text-black mb-4 leading-5">
+                    {data.descripcion || "No hay descripción disponible."}
+                </Text>
             </View>
         </ScrollView>
     );
-};
+}

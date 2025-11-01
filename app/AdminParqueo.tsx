@@ -1,15 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { getTarifasYPlazas } from '@/api/parqueoApi';
+
 import {
     Alert,
     Dimensions,
     FlatList,
-    LayoutAnimation,
-    Modal,
     Platform,
-    Pressable,
     ScrollView,
-    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
@@ -22,8 +20,6 @@ import {
     CAPACIDAD_MOTOS,
     TARIFA_AUTOS,
     TARIFA_MOTOS,
-    TARIFA_AUTOS_NUM,
-    TARIFA_MOTOS_NUM,
     generarEspacios,
     calcularCobro,
     Espacio,
@@ -46,6 +42,24 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 export default function ParqueoDetalle() {
+
+      const [tarifas, setTarifas] = useState<
+    { tipoVehiculo: string; tarifaHora: string; plazasTotales: number; plazasOcupadas: number }[]
+  >([]);
+
+  useEffect(() => {
+    const cargarTarifas = async () => {
+      try {
+        const data = await getTarifasYPlazas();
+        setTarifas(data);
+      } catch (error) {
+        Alert.alert('Error', 'No se pudieron cargar las tarifas del parqueo');
+      }
+    };
+
+    cargarTarifas();
+  }, []);
+
     const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
     const [espacios, setEspacios] = useState<Espacio[]>([]);
 
@@ -216,36 +230,31 @@ export default function ParqueoDetalle() {
     }), [espacios]);
 
     return (
-        <View style={styles.container}>
-            <Text style={styles.titulo}>Parqueo N° 1</Text>
-            <View style={styles.resumenRow}>
-                <ResumenCard
-                    label="Autos"
-                    ocupados={autosOcupados}
-                    capacidad={CAPACIDAD_AUTOS}
-                    tarifa={TARIFA_AUTOS}
-                    color="#2980b9"
-                    icon="🚗"
-                />
-                <ResumenCard
-                    label="Motos"
-                    ocupados={motosOcupados}
-                    capacidad={CAPACIDAD_MOTOS}
-                    tarifa={TARIFA_MOTOS}
-                    color="#8e44ad"
-                    icon="🛵"
-                />
+        <View className="flex-1 p-6 bg-[#f8f9fa]">
+            <Text className="text-2xl font-bold my-7 text-[#222] self-center">PARQUEO N° 1</Text>
+            <View className="flex-row justify-between mb-4 gap-2.5">
+                  {tarifas.map((item) => (
+                    <ResumenCard
+                        key={item.tipoVehiculo}
+                        label={item.tipoVehiculo}
+                        ocupados={item.plazasOcupadas}
+                        capacidad={item.plazasTotales}
+                        tarifa={`${item.tarifaHora} Bs/h`}
+                        color={item.tipoVehiculo === 'Auto' ? '#2980b9' : '#8e44ad'}
+                        icon={item.tipoVehiculo === 'Auto' ? '🚗' : '🛵'}
+                    />
+                ))}
             </View>
 
-            <View style={styles.controls}>
+            <View className="mb-4 gap-2">
                 <TextInput
                     placeholder="Buscar placa"
                     value={buscar}
                     onChangeText={t => setBuscar(t.toUpperCase())}
-                    style={styles.input}
+                    className="border border-[#ddd] rounded-[10px] px-3.5 py-[11px] text-base bg-white"
                     autoCapitalize="characters"
                 />
-                <View style={styles.filtersRow}>
+                <View className="flex-row gap-2 items-center flex-wrap mt-1.5">
                     <FiltroBtn label="Todos" active={filtroTipo === 'todos'} onPress={() => setFiltroTipo('todos')} />
                     <FiltroBtn label="Autos" active={filtroTipo === 'auto'} onPress={() => setFiltroTipo('auto')} />
                     <FiltroBtn label="Motos" active={filtroTipo === 'moto'} onPress={() => setFiltroTipo('moto')} />
@@ -257,9 +266,9 @@ export default function ParqueoDetalle() {
                 <ScrollView style={{ maxHeight: 180 }}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                         <View style={{ flexDirection: 'row', gap: 22 }}>
-                            <View style={styles.gridGroup}>
-                                <Text style={styles.gridTitulo}>Autos</Text>
-                                <View style={styles.gridResponsive}>
+                            <View className="mr-7">
+                                <Text className="text-[15px] font-semibold mb-1.5 text-[#444] self-center">Autos</Text>
+                                <View className="flex-row flex-wrap gap-2 min-w-[200px] max-w-xs justify-start">
                                     {espaciosPorTipo.autos.map(e => (
                                         <ChipEspacio
                                             key={e.id}
@@ -270,9 +279,9 @@ export default function ParqueoDetalle() {
                                     ))}
                                 </View>
                             </View>
-                            <View style={styles.gridGroup}>
-                                <Text style={styles.gridTitulo}>Motos</Text>
-                                <View style={styles.gridResponsive}>
+                            <View className="mr-7">
+                                <Text className="text-[15px] font-semibold mb-1.5 text-[#444] self-center">Motos</Text>
+                                <View className="flex-row flex-wrap gap-2 min-w-[200px] max-w-xs justify-start">
                                     {espaciosPorTipo.motos.map(e => (
                                         <ChipEspacio
                                             key={e.id}
@@ -291,14 +300,14 @@ export default function ParqueoDetalle() {
             <CollapsibleSection title={verHistorial ? 'Historial de vehículos' : 'Vehículos en el parqueo'} defaultCollapsed={false}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={true} style={{ marginBottom: 8 }}>
                     <View style={{ minWidth: SCREEN_WIDTH }}>
-                        <View style={styles.tablaHeader}>
-                            <Text style={styles.tablaHeaderText}>Placa</Text>
-                            <Text style={styles.tablaHeaderText}>Tipo</Text>
-                            <Text style={styles.tablaHeaderText}>Espacio</Text>
-                            <Text style={styles.tablaHeaderText}>Inicio</Text>
-                            <Text style={styles.tablaHeaderText}>Fin</Text>
-                            <Text style={styles.tablaHeaderText}>Monto</Text>
-                            <Text style={styles.tablaHeaderText}></Text>
+                        <View className="flex-row border-b border-[#eee] py-1 items-center min-w-[570px]">
+                            <Text className="text-xl font-bold w-20 text-left text-[#444] min-w-[70px] max-w-[120px]">Placa</Text>
+                            <Text className="text-xl font-bold w-20 text-left text-[#444] min-w-[70px] max-w-[120px]">Tipo</Text>
+                            <Text className="text-xl font-bold w-20 text-left text-[#444] min-w-[70px] max-w-[120px]">Espacio</Text>
+                            <Text className="text-xl font-bold w-20 text-left text-[#444] min-w-[70px] max-w-[120px]">Inicio</Text>
+                            <Text className="text-xl font-bold w-20 text-left text-[#444] min-w-[70px] max-w-[120px]">Fin</Text>
+                            <Text className="text-xl font-bold w-20 text-left text-[#444] min-w-[70px] max-w-[120px]">Monto</Text>
+                            <Text className="text-xl font-bold w-20 text-left text-[#444] min-w-[70px] max-w-[120px]"></Text>
                         </View>
                         <FlatList
                             data={vehiculosFiltrados}
@@ -312,18 +321,21 @@ export default function ParqueoDetalle() {
                 </ScrollView>
             </CollapsibleSection>
 
-            <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.ingresoBtn} onPress={() => setModalVisible(true)}>
-                    <Text style={styles.botonTexto}>Ingresar Vehículo</Text>
+            <View className="flex-row gap-[9px] mb-[86px]">
+                <TouchableOpacity className="bg-[#2980b9] py-[13px] rounded-xl items-center flex-1 mr-[9px]" onPress={() => setModalVisible(true)}>
+                    <Text className="text-center text-white font-bold text-[17px]">Ingresar Vehículo</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.reservaBtn} onPress={() => setModalReservaVisible(true)}>
-                    <Text style={styles.botonTexto}>Reservar Espacio</Text>
+                <TouchableOpacity className="bg-[#8e44ad] py-[13px] rounded-xl items-center flex-1" onPress={() => setModalReservaVisible(true)}>
+                    <Text className="text-center text-white font-bold text-[17px]">Reservar Espacio</Text>
                 </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.botonEdit}>
-                <Text style={styles.botonTexto}>Editar Información</Text>
-            </TouchableOpacity>
+            <View className="items-center">
+                <TouchableOpacity className="py-3 w-full bg-[#222] rounded-xl absolute shadow shadow-black">
+                    <Text className="text-center text-white font-bold text-2xl">Editar Información</Text>
+                </TouchableOpacity>
+
+            </View>
 
             <ModalIngreso
                 visible={modalVisible}
@@ -356,230 +368,3 @@ export default function ParqueoDetalle() {
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        padding: 18,
-        backgroundColor: '#f8f9fa',
-    },
-    titulo: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        marginBottom: 10,
-        color: '#222',
-        alignSelf: 'center',
-    },
-    resumenRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-        gap: 10,
-    },
-    controls: {
-        marginBottom: 14,
-        gap: 8,
-    },
-    input: {
-        borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 11,
-        fontSize: 16,
-        backgroundColor: '#fff',
-    },
-    filtersRow: {
-        flexDirection: 'row',
-        gap: 8,
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        marginTop: 6,
-    },
-    seccionLabel: {
-        fontSize: 19,
-        fontWeight: 'bold',
-        marginVertical: 10,
-        color: '#222',
-    },
-    gridGroup: {
-        marginRight: 26,
-    },
-    gridTitulo: {
-        fontSize: 15,
-        fontWeight: '600',
-        marginBottom: 6,
-        color: '#444',
-        alignSelf: 'center',
-    },
-    gridResponsive: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-        minWidth: 200,
-        maxWidth: 320,
-        justifyContent: 'flex-start',
-    },
-    tablaHeader: {
-        flexDirection: 'row',
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-        paddingVertical: 4,
-        alignItems: 'center',
-        minWidth: 570,
-    },
-    tablaHeaderText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        width: 80,
-        textAlign: 'left',
-        color: '#444',
-        minWidth: 70,
-        maxWidth: 120,
-    },
-    tablaRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderBottomWidth: 0.5,
-        borderBottomColor: '#eee',
-        paddingVertical: 6,
-        backgroundColor: '#fff',
-        borderRadius: 6,
-        marginBottom: 2,
-        minWidth: 570,
-    },
-    tablaCell: {
-        fontSize: 15,
-        color: '#222',
-        width: 80,
-        minWidth: 70,
-        maxWidth: 120,
-    },
-    salidaBtn: {
-        backgroundColor: '#e74c3c',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    salidaBtnTxt: {
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
-    ingresoBtn: {
-        backgroundColor: '#2980b9',
-        paddingVertical: 13,
-        borderRadius: 12,
-        alignItems: 'center',
-        flex: 1,
-        marginRight: 9,
-    },
-    reservaBtn: {
-        backgroundColor: '#8e44ad',
-        paddingVertical: 13,
-        borderRadius: 12,
-        alignItems: 'center',
-        flex: 1,
-    },
-    actionRow: {
-        flexDirection: 'row',
-        gap: 9,
-        marginBottom: 86,
-    },
-    botonEdit: {
-        backgroundColor: '#222',
-        paddingVertical: 14,
-        borderRadius: 12,
-        alignItems: 'center',
-        position: 'absolute',
-        bottom: 24,
-        left: 18,
-        right: 18,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.22,
-        shadowRadius: 2.22,
-        elevation: 4,
-    },
-    botonTexto: {
-        color: '#fff',
-        fontWeight: 'bold',
-        fontSize: 17,
-    },
-    chip: {
-        borderWidth: 1,
-        borderColor: '#bbb',
-        borderRadius: 18,
-        paddingHorizontal: 13,
-        paddingVertical: 7,
-        backgroundColor: '#fafafa',
-    },
-    chipActive: {
-        backgroundColor: '#2c3e50',
-        borderColor: '#2c3e50',
-    },
-    chipTxt: { color: '#333' },
-    chipTxtActive: { color: '#fff', fontWeight: '600' },
-    modalBackdrop: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.28)',
-        justifyContent: 'center',
-        padding: 16,
-    },
-    modalCard: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 18,
-        gap: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
-        elevation: 6,
-    },
-    modalTitulo: { fontSize: 19, fontWeight: 'bold', marginBottom: 8, color: '#2980b9' },
-    seleccionTitulo: { fontSize: 14, color: '#444', marginTop: 6 },
-    modalActions: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 14,
-        marginTop: 16,
-    },
-    cancelBtn: { paddingHorizontal: 14, paddingVertical: 9 },
-    okBtn: {
-        backgroundColor: '#27ae60',
-        paddingHorizontal: 14,
-        paddingVertical: 9,
-        borderRadius: 10,
-    },
-    // Collapsible
-    collapseHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: '#f0f0f0',
-        borderRadius: 8,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        marginBottom: 4,
-    },
-    collapseTitle: {
-        fontSize: 17,
-        fontWeight: 'bold',
-        color: '#222',
-    },
-    collapseArrow: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#888',
-        marginLeft: 6,
-    },
-    collapseContent: {
-        backgroundColor: '#fff',
-        borderRadius: 8,
-        padding: 8,
-        paddingTop: 4,
-    },
-});

@@ -18,7 +18,7 @@ export default function ResumenCard({
 }) {
     return (
         <View style={{
-            backgroundColor: '#fff',
+            backgroundColor: '#d1dddd',
             borderRadius: 16,
             padding: 15,
             flex: 1,

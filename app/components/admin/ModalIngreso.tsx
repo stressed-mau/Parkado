@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View, StyleSheet } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import ChipEspacio from './ChipEspacio';
 import { Espacio, Vehiculo } from '../../constants/parqueo';
 
@@ -20,27 +20,27 @@ export default function ModalIngreso({
 
     return (
         <Modal visible={visible} animationType="slide" transparent>
-            <View style={styles.modalBackdrop}>
-                <View style={styles.modalCard}>
-                    <Text style={styles.modalTitulo}>Ingresar Vehículo</Text>
+            <View className="flex-1 justify-center p-4 bg-black/28">
+                <View className="bg-yellow-400 rounded-lg p-[18px] gap-2 shadow-lg shadow-black">
+                    <Text className="text-[19px] font-bold mb-2 text-[#2980b9] ">Ingresar Vehículo</Text>
                     <TextInput
                         placeholder="Placa (p.ej. ABC-123)"
                         autoCapitalize="characters"
                         value={placaInput}
                         onChangeText={t => setPlacaInput(t.toUpperCase())}
-                        style={styles.input}
+                        className="border border-[#ddd] rounded-[10px] px-3.5 py-[11px] text-base bg-white mb-2"
                     />
-                    <View style={styles.filtersRow}>
-                        <Pressable onPress={() => setTipoInput('auto')} style={[styles.filterBtn, tipoInput === 'auto' && styles.filterBtnActive]}>
-                            <Text style={{ color: tipoInput === 'auto' ? '#fff' : '#333' }}>Auto</Text>
+                    <View className="flex-row gap-2 items-center mt-1.5">
+                        <Pressable onPress={() => setTipoInput('auto')} className={`px-3 py-[7px] rounded-[10px] ${tipoInput === 'auto' ? 'bg-[#2c3e50]' : 'bg-[#f0f0f0]'}`}>
+                            <Text className={`${tipoInput === 'auto' ? 'text-white' : 'text-[#333]'}`}>Auto</Text>
                         </Pressable>
-                        <Pressable onPress={() => setTipoInput('moto')} style={[styles.filterBtn, tipoInput === 'moto' && styles.filterBtnActive]}>
-                            <Text style={{ color: tipoInput === 'moto' ? '#fff' : '#333' }}>Moto</Text>
+                        <Pressable onPress={() => setTipoInput('moto')} className={`px-3 py-[7px] rounded-[10px] ${tipoInput === 'moto' ? 'bg-[#2c3e50]' : 'bg-[#f0f0f0]'}`}>
+                            <Text className={`${tipoInput === 'moto' ? 'text-white' : 'text-[#333]'}`}>Moto</Text>
                         </Pressable>
                     </View>
-                    <Text style={styles.seleccionTitulo}>Selecciona un espacio (opcional)</Text>
-                    <ScrollView style={{ maxHeight: 100 }}>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                    <Text className="text-lg text-[#444] mt-1.5">Selecciona un espacio (opcional)</Text>
+                    <ScrollView className="max-h-[100px]">
+                        <View className="flex-row flex-wrap">
                             {(tipoInput === 'auto' ? espacios.filter(e => e.tipo === 'auto' && e.estado === 'libre') : espacios.filter(e => e.tipo === 'moto' && e.estado === 'libre')).map(e => (
                                 <ChipEspacio
                                     key={e.id}
@@ -51,19 +51,19 @@ export default function ModalIngreso({
                             ))}
                         </View>
                     </ScrollView>
-                    <View style={styles.modalActions}>
-                        <Pressable style={styles.cancelBtn} onPress={onClose}>
+                    <View className="flex-row justify-end gap-3.5 mt-4">
+                        <Pressable className="px-3.5 py-[9px]" onPress={onClose}>
                             <Text>Cancelar</Text>
                         </Pressable>
                         <Pressable
-                            style={styles.okBtn}
+                            className="bg-[#27ae60] px-3.5 py-[9px] rounded-[10px]"
                             onPress={() => {
                                 onConfirm(placaInput, tipoInput, espacioSeleccionado);
                                 setPlacaInput('');
                                 setEspacioSeleccionado(null);
                             }}
                         >
-                            <Text style={{ color: '#fff' }}>Confirmar</Text>
+                            <Text className="text-white">Confirmar</Text>
                         </Pressable>
                     </View>
                 </View>
@@ -71,63 +71,3 @@ export default function ModalIngreso({
         </Modal>
     );
 }
-
-const styles = StyleSheet.create({
-    modalBackdrop: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.28)',
-        justifyContent: 'center',
-        padding: 16,
-    },
-    modalCard: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 18,
-        gap: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
-        elevation: 6,
-    },
-    modalTitulo: { fontSize: 19, fontWeight: 'bold', marginBottom: 8, color: '#2980b9' },
-    seleccionTitulo: { fontSize: 14, color: '#444', marginTop: 6 },
-    modalActions: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 14,
-        marginTop: 16,
-    },
-    cancelBtn: { paddingHorizontal: 14, paddingVertical: 9 },
-    okBtn: {
-        backgroundColor: '#27ae60',
-        paddingHorizontal: 14,
-        paddingVertical: 9,
-        borderRadius: 10,
-    },
-    input: {
-        borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 11,
-        fontSize: 16,
-        backgroundColor: '#fff',
-        marginBottom: 8,
-    },
-    filtersRow: {
-        flexDirection: 'row',
-        gap: 8,
-        alignItems: 'center',
-        marginTop: 6,
-    },
-    filterBtn: {
-        paddingHorizontal: 12,
-        paddingVertical: 7,
-        borderRadius: 10,
-        backgroundColor: '#f0f0f0',
-    },
-    filterBtnActive: {
-        backgroundColor: '#2c3e50',
-    },
-});

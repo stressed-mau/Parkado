@@ -18,49 +18,18 @@ export default function CollapsibleSection({
     }
 
     return (
-        <View style={{ marginBottom: 18 }}>
+        <View className="mb-4">
             <Pressable
                 onPress={toggle}
-                style={styles.collapseHeader}
-            >
-                <Text style={styles.collapseTitle}>{title}</Text>
-                <Text style={styles.collapseArrow}>{collapsed ? '▼' : '▲'}</Text>
+                className="flex-row items-center justify-between bg-[#f0f0f0] rounded-lg px-3.5 py-2.5 mb-1"            >
+                <Text className="text-[17px] font-bold text-[#222]">{title}</Text>
+                <Text className="text-base font-bold text-[#888] ml-1.5">{collapsed ? '▼' : '▲'}</Text>
             </Pressable>
             {!collapsed && (
-                <View style={styles.collapseContent}>
+                <View className="bg-white rounded-lg p-2 pt-1">
                     {children}
                 </View>
             )}
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    collapseHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: '#f0f0f0',
-        borderRadius: 8,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        marginBottom: 4,
-    },
-    collapseTitle: {
-        fontSize: 17,
-        fontWeight: 'bold',
-        color: '#222',
-    },
-    collapseArrow: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#888',
-        marginLeft: 6,
-    },
-    collapseContent: {
-        backgroundColor: '#fff',
-        borderRadius: 8,
-        padding: 8,
-        paddingTop: 4,
-    },
-});

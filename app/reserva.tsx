@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Platform, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // --- TIPOS COMPLETOS ---
 interface PlazaAPI {
@@ -53,10 +54,17 @@ interface ParqueoDetalleAPI {
     propietarioId: number;
 }
 
+interface UserData {
+    id: string;
+    email: string;
+    token: string;
+    nombre: string;
+}
+
 type Espacio = { 
     id: string; 
     tipo: 'auto' | 'moto'; 
-    estado: 'libre' | 'ocupado';
+    estado: 'libre' | 'ocupado' | 'mantenimiento';
     nroPlazaReal: string;
     plazaIdReal: number;
 };
@@ -65,7 +73,7 @@ type Tarifas = { auto: number; moto: number; };
 
 const METODOS_PAGO = ['Efectivo', 'Tarjeta', 'QR'];
 
-// --- COMPONENTE PRINCIPAL COMPLETO ---
+// --- COMPONENTE PRINCIPAL COMPLETO Y CORREGIDO ---
 export default function ReservaScreen() {
     const router = useRouter();
     const params = useLocalSearchParams<{
@@ -92,96 +100,266 @@ export default function ReservaScreen() {
     const [modeInicioPicker, setModeInicioPicker] = useState<'date' | 'time'>('date');
     const [showFinPicker, setShowFinPicker] = useState(false);
     const [modeFinPicker, setModeFinPicker] = useState<'date' | 'time'>('date');
+    const [userData, setUserData] = useState<UserData | null>(null);
+    const [isCreatingReserva, setIsCreatingReserva] = useState(false);
     
     // ESTADOS PARA DATOS REALES DE LA API
     const [datosParqueo, setDatosParqueo] = useState<ParqueoDetalleAPI | null>(null);
     const [tarifasReales, setTarifasReales] = useState<Tarifas>({ auto: 0, moto: 0 });
-    const [capacidadesReales, setCapacidadesReales] = useState({ autos: 0, motos: 0 });
 
-    // --- EFECTO PARA CARGAR DATOS REALES DE LA API ---
+    // --- CARGAR DATOS DEL USUARIO DESDE ASYNC STORAGE ---
     useEffect(() => {
-        const cargarDatosReales = async () => {
+        const cargarUsuario = async () => {
             try {
-                console.log('🔄 Cargando datos reales del parqueo ID:', parqueoId);
-                
-                const url = `https://parkado-backend.vercel.app/api/parqueos/details`;
-                const response = await fetch(url);
-                
-                if (!response.ok) {
-                    throw new Error(`Error ${response.status} al cargar datos`);
+                const storedUserData = await AsyncStorage.getItem('userData');
+                if (storedUserData) {
+                    const user = JSON.parse(storedUserData);
+                    setUserData(user);
+                    console.log('✅ Usuario cargado desde AsyncStorage:', user);
+                } else {
+                    console.log('❌ No hay usuario logueado');
                 }
-
-                const json: ParqueoDetalleAPI[] = await response.json();
-                const idBuscado = parseInt(parqueoId, 10);
-                const parqueoEncontrado = json.find((parqueo) => parqueo.id === idBuscado);
-
-                if (!parqueoEncontrado) {
-                    throw new Error(`Parqueo con ID ${parqueoId} no encontrado`);
-                }
-
-                console.log('✅ Datos reales cargados:', {
-                    nombre: parqueoEncontrado.nombre,
-                    plazas: parqueoEncontrado.plazas?.length || 0,
-                    tarifas: parqueoEncontrado.tarifas?.length || 0,
-                    capacidades: parqueoEncontrado.capacidades?.length || 0
-                });
-
-                setDatosParqueo(parqueoEncontrado);
-
-                // EXTRAER TARIFAS REALES
-                const tarifaAutoObj = parqueoEncontrado.tarifas?.find(t => 
-                    t.tipoVehiculoId === 1 || t.descripcion.toLowerCase().includes('auto')
-                );
-                const tarifaMotoObj = parqueoEncontrado.tarifas?.find(t => 
-                    t.tipoVehiculoId === 2 || t.descripcion.toLowerCase().includes('moto')
-                );
-
-                setTarifasReales({
-                    auto: tarifaAutoObj ? parseFloat(tarifaAutoObj.precioHora) : 0,
-                    moto: tarifaMotoObj ? parseFloat(tarifaMotoObj.precioHora) : 0
-                });
-
-                // EXTRAER CAPACIDADES REALES
-                const capacidadAutoObj = parqueoEncontrado.capacidades?.find(c => 
-                    c.tipoVehiculoId === 1 || c.tipoVehiculo.nombre.toLowerCase().includes('auto')
-                );
-                const capacidadMotoObj = parqueoEncontrado.capacidades?.find(c => 
-                    c.tipoVehiculoId === 2 || c.tipoVehiculo.nombre.toLowerCase().includes('moto')
-                );
-
-                setCapacidadesReales({
-                    autos: capacidadAutoObj ? capacidadAutoObj.cantidad : 0,
-                    motos: capacidadMotoObj ? capacidadMotoObj.cantidad : 0
-                });
-
-                // CONVERTIR PLAZAS REALES DE LA API AL FORMATO QUE USA EL COMPONENTE
-                const plazasConvertidas: Espacio[] = parqueoEncontrado.plazas?.map(plaza => ({
-                    id: plaza.id.toString(),
-                    tipo: plaza.tipoVehiculoId === 1 ? 'auto' as const : 'moto' as const,
-                    estado: (plaza.estado === 'ocupado' ? 'ocupado' : 'libre') as 'libre' | 'ocupado',
-                    nroPlazaReal: plaza.nroPlaza,
-                    plazaIdReal: plaza.id
-                })) || [];
-
-                console.log('🅿️ Plazas convertidas:', plazasConvertidas);
-                setPlazasReales(plazasConvertidas);
-
-            } catch (error: any) {
-                console.error('❌ Error cargando datos reales:', error);
-                Alert.alert('Error', 'No se pudieron cargar los datos del parqueo: ' + error.message);
-            } finally {
-                setIsLoading(false);
+            } catch (error) {
+                console.error('Error cargando usuario:', error);
             }
         };
 
-        cargarDatosReales();
-    }, [parqueoId]);
+        cargarUsuario();
+    }, []);
 
-    // FILTRAR PLAZAS DISPONIBLES POR TIPO
-    const plazasDisponiblesParaTipo = useMemo(() => 
-        plazasReales.filter(p => p.tipo === tipoVehiculo && p.estado === 'libre'), 
-        [plazasReales, tipoVehiculo]
+    // --- FUNCIÓN PARA CARGAR PLAZAS DISPONIBLES - USANDO ENDPOINT CORRECTO ---
+const cargarPlazasDisponibles = useCallback(async () => {
+    try {
+        console.log('🔄 Cargando plazas disponibles para parqueo ID:', parqueoId);
+        
+        // ✅ USAR EL ENDPOINT CORRECTO QUE SÍ EXISTE
+        const url = `https://parkado-backend.vercel.app/api/parqueos/details`;
+        console.log('📡 URL de la API:', url);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`Error ${response.status} al cargar datos`);
+        }
+
+        const json: ParqueoDetalleAPI[] = await response.json();
+        const idBuscado = parseInt(parqueoId, 10);
+        const parqueoEncontrado = json.find((parqueo) => parqueo.id === idBuscado);
+
+        if (!parqueoEncontrado) {
+            throw new Error(`Parqueo con ID ${parqueoId} no encontrado`);
+        }
+
+        console.log('🏢 Parqueo encontrado:', {
+            id: parqueoEncontrado.id,
+            nombre: parqueoEncontrado.nombre,
+            totalTarifas: parqueoEncontrado.tarifas?.length || 0,
+            tarifasDetalles: parqueoEncontrado.tarifas
+        });
+
+        setDatosParqueo(parqueoEncontrado);
+
+        // ✅ EXTRAER TARIFAS - MÉTODO ROBUSTO
+        let tarifaAuto = 0;
+        let tarifaMoto = 0;
+
+        if (parqueoEncontrado.tarifas && parqueoEncontrado.tarifas.length > 0) {
+            // Buscar por tipoVehiculoId (más confiable)
+            const tarifaAutoObj = parqueoEncontrado.tarifas.find(t => t.tipoVehiculoId === 1);
+            const tarifaMotoObj = parqueoEncontrado.tarifas.find(t => t.tipoVehiculoId === 2);
+            
+            // Si no encuentra por ID, buscar por descripción
+            const tarifaAutoPorDesc = tarifaAutoObj || parqueoEncontrado.tarifas.find(t => 
+                t.descripcion.toLowerCase().includes('auto')
+            );
+            const tarifaMotoPorDesc = tarifaMotoObj || parqueoEncontrado.tarifas.find(t => 
+                t.descripcion.toLowerCase().includes('moto')
+            );
+
+            tarifaAuto = tarifaAutoPorDesc ? parseFloat(tarifaAutoPorDesc.precioHora) : 0;
+            tarifaMoto = tarifaMotoPorDesc ? parseFloat(tarifaMotoPorDesc.precioHora) : 0;
+
+            console.log('💰 Tarifas extraídas:', {
+                auto: tarifaAuto,
+                moto: tarifaMoto,
+                encontradoAuto: !!tarifaAutoPorDesc,
+                encontradoMoto: !!tarifaMotoPorDesc,
+                todasLasTarifas: parqueoEncontrado.tarifas.map(t => ({
+                    id: t.id,
+                    descripcion: t.descripcion,
+                    precioHora: t.precioHora,
+                    tipoVehiculoId: t.tipoVehiculoId
+                }))
+            });
+        } else {
+            console.warn('⚠️ Este parqueo no tiene tarifas definidas');
+            // Usar tarifas por defecto si no hay
+            tarifaAuto = 8.5;
+            tarifaMoto = 4.0;
+        }
+
+        setTarifasReales({
+            auto: tarifaAuto,
+            moto: tarifaMoto
+        });
+
+        // CONVERTIR PLAZAS REALES DE LA API AL FORMATO QUE USA EL COMPONENTE
+        const plazasConvertidas: Espacio[] = parqueoEncontrado.plazas
+            ?.filter(plaza => {
+                // Filtrar solo plazas DISPONIBLES
+                const estaDisponible = plaza.estado === 'DISPONIBLE' || plaza.estado === 'libre' || plaza.estado === null;
+                return estaDisponible;
+            })
+            .map(plaza => ({
+                id: plaza.id.toString(),
+                tipo: plaza.tipoVehiculoId === 1 ? 'auto' as const : 'moto' as const,
+                estado: 'libre' as const,
+                nroPlazaReal: plaza.nroPlaza,
+                plazaIdReal: plaza.id
+            })) || [];
+
+        console.log('🅿️ Plazas disponibles cargadas:', {
+            parqueoId: parqueoEncontrado.id,
+            parqueoNombre: parqueoEncontrado.nombre,
+            totalPlazas: parqueoEncontrado.plazas?.length || 0,
+            disponibles: plazasConvertidas.length,
+            tarifas: { auto: tarifaAuto, moto: tarifaMoto },
+            todasLasPlazas: parqueoEncontrado.plazas?.map(p => ({
+                id: p.id,
+                nroPlaza: p.nroPlaza,
+                tipoVehiculoId: p.tipoVehiculoId,
+                estado: p.estado
+            }))
+        });
+
+        setPlazasReales(plazasConvertidas);
+
+    } catch (error: any) {
+        console.error('❌ Error cargando datos del parqueo:', error);
+        Alert.alert('Error', 'No se pudieron cargar los datos del parqueo: ' + error.message);
+        
+        // CARGAR DATOS POR DEFECTO EN CASO DE ERROR
+        setTarifasReales({ auto: 8.5, moto: 4.0 });
+        setPlazasReales([]);
+    } finally {
+        setIsLoading(false);
+    }
+}, [parqueoId]);
+
+    // --- EFECTO PARA CARGAR DATOS AL INICIAR Y AL ENFOCAR ---
+    useEffect(() => {
+        cargarPlazasDisponibles();
+    }, [cargarPlazasDisponibles]);
+
+    // Recargar plazas cuando la pantalla recibe foco
+    useFocusEffect(
+        useCallback(() => {
+            cargarPlazasDisponibles();
+        }, [cargarPlazasDisponibles])
     );
+
+    // --- FUNCIÓN PARA CREAR RESERVA EN LA API ---
+    const crearReservaEnAPI = async (reservaData: any) => {
+        try {
+            if (!userData) {
+                throw new Error('Usuario no autenticado');
+            }
+
+            const reservaPayload = {
+                fechaHoraIni: reservaData.fechaInicioISO,
+                fechaHoraFin: reservaData.fechaFinISO,
+                plazaId: parseInt(reservaData.plazaId),
+                usuarioId: parseInt(userData.id),
+                matriculaVehiculo: reservaData.matricula
+            };
+
+            console.log('📤 Enviando reserva a API:', reservaPayload);
+
+            const response = await fetch('https://parkado-backend.vercel.app/api/reservas', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${userData.token}`
+                },
+                body: JSON.stringify(reservaPayload)
+            });
+
+            const responseData = await response.json();
+
+            if (!response.ok) {
+                if (response.status === 409) {
+                    throw new Error('Conflicto de Horario: La plaza ya está reservada en ese rango.');
+                }
+                throw new Error(responseData.message || `Error ${response.status} al crear la reserva`);
+            }
+
+            console.log('✅ Reserva creada exitosamente:', responseData);
+            return responseData;
+
+        } catch (error: any) {
+            console.error('❌ Error creando reserva:', error);
+            throw error;
+        }
+    };
+
+    // --- FUNCIÓN PARA ACTUALIZAR ESTADO DE PLAZA A OCUPADO ---
+    const actualizarEstadoPlaza = async (plazaId: number) => {
+        try {
+            if (!userData) {
+                throw new Error('Usuario no autenticado');
+            }
+
+            const updatePayload = {
+                userId: 2, // propietariold del parqueo
+                estado: "OCUPADO"
+            };
+
+            console.log('🔄 Actualizando estado de plaza:', { plazaId, updatePayload });
+
+            const response = await fetch(`https://parkado-backend.vercel.app/api/plazas/${plazaId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${userData.token}`
+                },
+                body: JSON.stringify(updatePayload)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `Error ${response.status} al actualizar plaza`);
+            }
+
+            const responseData = await response.json();
+            console.log('✅ Estado de plaza actualizado exitosamente:', responseData);
+            return responseData;
+
+        } catch (error: any) {
+            console.error('❌ Error actualizando estado de plaza:', error);
+            throw error;
+        }
+    };
+
+    // CALCULAR PLAZAS DISPONIBLES POR TIPO PARA LOS BOTONES
+    const plazasDisponiblesPorTipo = useMemo(() => {
+        const autos = plazasReales.filter(p => p.tipo === 'auto').length;
+        const motos = plazasReales.filter(p => p.tipo === 'moto').length;
+        
+        console.log(`🎯 Plazas disponibles - Autos: ${autos}, Motos: ${motos}`);
+        
+        return { autos, motos };
+    }, [plazasReales]);
+
+    // FILTRAR PLAZAS DISPONIBLES POR TIPO - MEJORADO
+    const plazasDisponiblesParaTipo = useMemo(() => {
+        const disponibles = plazasReales.filter(p => 
+            p.tipo === tipoVehiculo && 
+            p.estado === 'libre'
+        );
+        
+        console.log(`🎯 Plazas ${tipoVehiculo} disponibles:`, disponibles.length);
+        return disponibles;
+    }, [plazasReales, tipoVehiculo]);
 
     // CALCULAR COSTO TOTAL CON TARIFAS REALES
     const costoTotal = useMemo(() => {
@@ -233,7 +411,8 @@ export default function ReservaScreen() {
         setModeFinPicker(currentMode); 
     };
 
-    const handleConfirmarReserva = () => {
+    // --- MANEJADOR DE CONFIRMACIÓN MEJORADO ---
+    const handleConfirmarReserva = async () => {
         if (!plazaSeleccionadaId) { 
             Alert.alert("Requerido", "Selecciona una plaza."); 
             return; 
@@ -255,7 +434,29 @@ export default function ReservaScreen() {
             return;
         }
 
+        if (!userData) {
+            Alert.alert(
+                "Sesión Requerida", 
+                "Debes iniciar sesión para hacer una reserva.",
+                [
+                    { text: "Cancelar", style: "cancel" },
+                    { text: "Iniciar Sesión", onPress: () => router.push('/LoginUsuario') }
+                ]
+            );
+            return;
+        }
+
         const plazaSeleccionada = plazasReales.find(p => p.id === plazaSeleccionadaId);
+        
+        // VERIFICAR QUE LA PLAZA SIGA DISPONIBLE
+        if (!plazaSeleccionada || plazaSeleccionada.estado !== 'libre') {
+            Alert.alert("Plaza no disponible", "La plaza seleccionada ya no está disponible. Por favor selecciona otra.");
+            // Recargar plazas disponibles
+            cargarPlazasDisponibles();
+            setPlazaSeleccionadaId(null);
+            return;
+        }
+
         const nroPlazaReal = plazaSeleccionada?.nroPlazaReal || plazaSeleccionadaId;
 
         const reservaData = {
@@ -267,27 +468,84 @@ export default function ReservaScreen() {
             matricula: matriculaLimpia,
             fechaInicioISO: fechaInicio.toISOString(),
             fechaFinISO: fechaFin.toISOString(),
+            fechaInicioFormatted: fechaInicio.toLocaleString('es-BO'),
+            fechaFinFormatted: fechaFin.toLocaleString('es-BO'),
             costoTotal: costoTotal.toString(),
+            costoTotalFormatted: `${costoTotal.toFixed(2)} Bs`,
             metodoPago: metodoPago,
             parqueoLat: datosParqueo.latitud.toString(),
             parqueoLng: datosParqueo.longitud.toString(),
             tarifaAplicada: (tipoVehiculo === 'auto' ? tarifasReales.auto : tarifasReales.moto).toString(),
             tarifaAuto: tarifasReales.auto.toString(),
-            tarifaMoto: tarifasReales.moto.toString()
+            tarifaMoto: tarifasReales.moto.toString(),
+            usuarioId: userData.id,
+            usuarioEmail: userData.email,
+            usuarioNombre: userData.nombre,
+            timestamp: Date.now().toString()
         };
 
-        console.log('📋 Datos de reserva completos:', reservaData);
+        console.log('📋 Datos de reserva completos para pago:', reservaData);
 
-        if (metodoPago === 'QR') {
-            router.push({ pathname: '/PagoQR' as any, params: reservaData });
-        } else if (metodoPago === 'Tarjeta') {
-            router.push({ pathname: '/PagoTarjeta' as any, params: reservaData });
-        } else {
-            Alert.alert(
-                "Confirmada (Efectivo)", 
-                `Detalles:\n• Parqueo: ${reservaData.parqueoNombre}\n• Plaza: ${reservaData.nroPlazaReal}\n• Vehículo: ${tipoVehiculo}\n• Matrícula: ${matriculaLimpia}\n• Horario: ${fechaInicio.toLocaleString()} - ${fechaFin.toLocaleString()}\n• Costo: ${costoTotal.toFixed(2)} Bs\n• Método: ${metodoPago}`,
-                [{ text: "OK", onPress: () => router.back() }] 
-            );
+        try {
+            setIsCreatingReserva(true);
+
+            if (metodoPago === 'Efectivo') {
+                const reservaCreada = await crearReservaEnAPI(reservaData);
+                
+                // ACTUALIZAR PLAZA A OCUPADO
+                const plazaIdReal = parseInt(plazaSeleccionadaId);
+                await actualizarEstadoPlaza(plazaIdReal);
+                
+                // ACTUALIZAR ESTADO LOCAL Y RECARGAR PLAZAS DISPONIBLES
+                setPlazasReales(prev => 
+                    prev.map(plaza => 
+                        plaza.id === plazaSeleccionadaId 
+                            ? { ...plaza, estado: 'ocupado' as const }
+                            : plaza
+                    )
+                );
+
+                // Recargar plazas disponibles
+                setTimeout(() => {
+                    cargarPlazasDisponibles();
+                }, 1000);
+                
+                Alert.alert(
+                    "✅ Reserva Confirmada", 
+                    `Detalles:\n• Parqueo: ${reservaData.parqueoNombre}\n• Plaza: ${reservaData.nroPlazaReal}\n• Vehículo: ${tipoVehiculo}\n• Matrícula: ${matriculaLimpia}\n• Horario: ${fechaInicio.toLocaleString()} - ${fechaFin.toLocaleString()}\n• Costo: ${costoTotal.toFixed(2)} Bs\n• Método: ${metodoPago}\n• ID Reserva: ${reservaCreada.id}`,
+                    [{ 
+                        text: "Ver Ruta", 
+                        onPress: () => {
+                            router.push({
+                                pathname: '/(tabs)/Mapa' as any,
+                                params: {
+                                    destLat: reservaData.parqueoLat,
+                                    destLng: reservaData.parqueoLng,
+                                    destNombre: reservaData.parqueoNombre,
+                                    reservaId: reservaCreada.id?.toString() || 'N/A'
+                                }
+                            });
+                        }
+                    }] 
+                );
+            } else if (metodoPago === 'QR') {
+                console.log('🔄 Navegando a PagoQR con datos:', reservaData);
+                router.push({ 
+                    pathname: '/PagoQR' as any, 
+                    params: reservaData 
+                });
+            } else if (metodoPago === 'Tarjeta') {
+                console.log('🔄 Navegando a PagoTarjeta con datos:', reservaData);
+                router.push({ 
+                    pathname: '/PagoTarjeta' as any, 
+                    params: reservaData 
+                });
+            }
+
+        } catch (error: any) {
+            Alert.alert("❌ Error", error.message || "No se pudo crear la reserva");
+        } finally {
+            setIsCreatingReserva(false);
         }
     };
 
@@ -295,7 +553,7 @@ export default function ReservaScreen() {
         return (
             <View className="flex-1 items-center justify-center bg-[#F6EEE4]">
                 <ActivityIndicator size="large" color="#7BB5CB" />
-                <Text className="mt-2 text-black">Cargando datos del parqueo...</Text>
+                <Text className="mt-2 text-black">Cargando plazas disponibles...</Text>
             </View>
         );
     }
@@ -315,6 +573,27 @@ export default function ReservaScreen() {
                 {datosParqueo?.direccion || 'Dirección no disponible'}
             </Text>
 
+            {/* Indicador de usuario */}
+            {userData ? (
+                <View className="bg-green-50 p-3 rounded-lg mb-4 border border-green-200">
+                    <Text className="text-green-800 text-sm">
+                        ✅ Sesión iniciada como: {userData.email}
+                    </Text>
+                </View>
+            ) : (
+                <View className="bg-yellow-50 p-3 rounded-lg mb-4 border border-yellow-200">
+                    <Text className="text-yellow-800 text-sm">
+                        ⚠️ Debes iniciar sesión para hacer una reserva
+                    </Text>
+                    <TouchableOpacity 
+                        onPress={() => router.push('/LoginUsuario')}
+                        className="mt-2 bg-[#7BB5CB] py-2 px-4 rounded-lg"
+                    >
+                        <Text className="text-white text-center font-semibold">Iniciar Sesión</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
             {/* === SECCIÓN 1: TIPO DE VEHÍCULO === */}
             <Text className="text-base font-semibold text-black mt-5 mb-2">Selecciona tu vehículo</Text>
             <View className="flex-row gap-3 mb-3">
@@ -327,7 +606,7 @@ export default function ReservaScreen() {
                     <FontAwesome5 name="motorcycle" size={24} color={tipoVehiculo === 'moto' ? '#F6EEE4' : '#7BB5CB'} />
                     <Text className={`text-xs font-semibold mt-2 ${tipoVehiculo === 'moto' ? 'text-white' : 'text-black'}`}>Motos</Text>
                     <Text className={`text-2xl font-bold ${tipoVehiculo === 'moto' ? 'text-white' : 'text-black'}`}>
-                        {capacidadesReales.motos}
+                        {plazasDisponiblesPorTipo.motos}
                     </Text>
                     <Text className={`text-xs ${tipoVehiculo === 'moto' ? 'text-white' : 'text-black'}`}>
                         {tarifasReales.moto} Bs/h
@@ -343,7 +622,7 @@ export default function ReservaScreen() {
                     <FontAwesome5 name="car" size={24} color={tipoVehiculo === 'auto' ? '#F6EEE4' : '#7BB5CB'} />
                     <Text className={`text-xs font-semibold mt-2 ${tipoVehiculo === 'auto' ? 'text-white' : 'text-black'}`}>Autos</Text>
                     <Text className={`text-2xl font-bold ${tipoVehiculo === 'auto' ? 'text-white' : 'text-black'}`}>
-                        {capacidadesReales.autos}
+                        {plazasDisponiblesPorTipo.autos}
                     </Text>
                     <Text className={`text-xs ${tipoVehiculo === 'auto' ? 'text-white' : 'text-black'}`}>
                         {tarifasReales.auto} Bs/h
@@ -371,13 +650,22 @@ export default function ReservaScreen() {
                                 <Text className={`text-xs ${plazaSeleccionadaId === plaza.id ? 'text-white' : 'text-gray-600'}`}>
                                     {plaza.tipo === 'auto' ? 'Auto' : 'Moto'}
                                 </Text>
+                                <Text className={`text-xs ${plazaSeleccionadaId === plaza.id ? 'text-white' : 'text-green-600'}`}>
+                                    ● Disponible
+                                </Text>
                             </TouchableOpacity>
                         ))
                     ) : (
                         <View className="py-3 px-4 bg-yellow-50 rounded-lg border border-yellow-200">
                             <Text className="italic text-black">
-                                No hay plazas {tipoVehiculo === 'auto' ? 'de auto' : 'de moto'} disponibles.
+                                No hay plazas {tipoVehiculo === 'auto' ? 'de auto' : 'de moto'} disponibles en este momento.
                             </Text>
+                            <TouchableOpacity 
+                                onPress={cargarPlazasDisponibles}
+                                className="mt-2 bg-[#7BB5CB] py-2 px-4 rounded-lg"
+                            >
+                                <Text className="text-white text-center font-semibold">Recargar</Text>
+                            </TouchableOpacity>
                         </View>
                     )}
                 </View>
@@ -523,17 +811,22 @@ export default function ReservaScreen() {
 
             {/* === SECCIÓN 8: BOTÓN CONFIRMAR === */}
             <TouchableOpacity 
-                className={`py-4 rounded-lg items-center mt-3 mb-5 shadow-xl ${(!plazaSeleccionadaId || !matricula.trim() || costoTotal <= 0) ? 'bg-gray-400' : 'bg-[#FD721D]'}`} 
+                className={`py-4 rounded-lg items-center mt-3 mb-5 shadow-xl ${(!plazaSeleccionadaId || !matricula.trim() || costoTotal <= 0 || isCreatingReserva || !userData) ? 'bg-gray-400' : 'bg-[#FD721D]'}`} 
                 onPress={handleConfirmarReserva} 
-                disabled={!plazaSeleccionadaId || !matricula.trim() || costoTotal <= 0} 
+                disabled={!plazaSeleccionadaId || !matricula.trim() || costoTotal <= 0 || isCreatingReserva || !userData} 
                 activeOpacity={0.8}
             >
-                <Text className="text-white text-lg font-bold">
-                    {!plazaSeleccionadaId ? 'Selecciona una plaza' : 
-                     !matricula.trim() ? 'Ingresa la matrícula' : 
-                     costoTotal <= 0 ? 'Verifica las fechas' : 
-                     'Confirmar Reserva'}
-                </Text>
+                {isCreatingReserva ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                    <Text className="text-white text-lg font-bold">
+                        {!userData ? 'Inicia sesión primero' :
+                         !plazaSeleccionadaId ? 'Selecciona una plaza' : 
+                         !matricula.trim() ? 'Ingresa la matrícula' : 
+                         costoTotal <= 0 ? 'Verifica las fechas' : 
+                         'Confirmar Reserva'}
+                    </Text>
+                )}
             </TouchableOpacity>
         </ScrollView>
     );

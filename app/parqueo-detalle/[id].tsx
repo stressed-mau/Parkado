@@ -58,15 +58,6 @@ interface Foto {
     parqueoId: number;
 }
 
-interface Plaza {
-    id: number;
-    nroPlaza: string;
-    ubicacionPiso: string | null;
-    estado: string | null;
-    parqueoId: number;
-    tipoVehiculoId: number;
-}
-
 interface ParqueoDetalleAPI {
     id: number;
     nombre: string;
@@ -79,11 +70,10 @@ interface ParqueoDetalleAPI {
     calificaciones: Calificacion[];
     capacidades: Capacidad[];
     servicios: Servicio[];
-    plazas: Plaza[];
     tarifas: Tarifa[];
     fotos: Foto[];
     descripcion?: string;
-    // NOTA: La API NO tiene imagen_url, usa el array "fotos"
+    plazas: any[];
 }
 
 const ALL_DAYS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
@@ -108,10 +98,12 @@ const useParqueoStats = (data: ParqueoDetalleAPI | null) => {
     }, [data]);
 };
 
-const formatHour = (isoString: string) => {
-    if (!isoString) return "N/A";
+const formatHour = (timeString: string) => {
+    if (!timeString) return "N/A";
     try {
-        const date = new Date(isoString);
+        const [hours, minutes] = timeString.split(':');
+        const date = new Date();
+        date.setHours(parseInt(hours), parseInt(minutes));
         return date.toLocaleTimeString('es-BO', { 
             hour: '2-digit', 
             minute: '2-digit', 
@@ -124,19 +116,21 @@ const formatHour = (isoString: string) => {
 
 const RatingStars = ({ rating }: { rating: number }) => {
     const fullStars = Math.floor(rating);
-    const emptyStars = 5 - fullStars;
+    const hasHalfStar = rating % 1 >= 0.5;
+    const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
     
     return (
         <View className="flex-row">
             <Text className="text-[#F2BD2B] text-lg">
                 {'★'.repeat(fullStars)}
+                {hasHalfStar ? '½' : ''}
                 {'☆'.repeat(emptyStars)}
             </Text>
         </View>
     );
 };
 
-// --- FUNCIÓN PARA OBTENER TODOS LOS DATOS REALES DE LA API ---
+// --- FUNCIÓN PARA OBTENER TODOS LOS DATOS REALES DE LA API - CON DISPONIBILIDAD ---
 const useParqueoData = (data: ParqueoDetalleAPI | null) => {
     return useMemo(() => {
         if (!data) {
@@ -147,64 +141,101 @@ const useParqueoData = (data: ParqueoDetalleAPI | null) => {
                 tarifaMoto: 0,
                 capacidadAutos: 0,
                 capacidadMotos: 0,
+                disponibilidadAutos: 0,
+                disponibilidadMotos: 0,
                 serviciosActivos: [],
-                plazasAutos: [],
-                plazasMotos: [],
-                totalPlazasAutos: 0,
-                totalPlazasMotos: 0
             };
         }
 
-        // 1. IMÁGENES - Usar TODAS las fotos del array "fotos"
+        // 1. IMÁGENES
         const imagenes = data.fotos && data.fotos.length > 0 
             ? data.fotos.map(foto => foto.url)
             : ['https://via.placeholder.com/400x250?text=No+Image'];
         
         const imagenPrincipal = imagenes[0];
 
-        // 2. TARIFAS - Buscar en el array "tarifas"
-        const tarifaAutoObj = data.tarifas?.find(t => 
-            t.tipoVehiculoId === 1 || t.descripcion.toLowerCase().includes('auto')
-        );
-        const tarifaMotoObj = data.tarifas?.find(t => 
-            t.tipoVehiculoId === 2 || t.descripcion.toLowerCase().includes('moto')
-        );
+        // 2. TARIFAS
+        let tarifaAuto = 0;
+        let tarifaMoto = 0;
 
-        const tarifaAuto = tarifaAutoObj ? parseFloat(tarifaAutoObj.precioHora) : 0;
-        const tarifaMoto = tarifaMotoObj ? parseFloat(tarifaMotoObj.precioHora) : 0;
+        if (data.tarifas && data.tarifas.length > 0) {
+            const tarifaAutoObj = data.tarifas.find(t => t.tipoVehiculoId === 1);
+            const tarifaMotoObj = data.tarifas.find(t => t.tipoVehiculoId === 2);
+            
+            const tarifaAutoPorDesc = tarifaAutoObj || data.tarifas.find(t => 
+                t.descripcion.toLowerCase().includes('auto')
+            );
+            const tarifaMotoPorDesc = tarifaMotoObj || data.tarifas.find(t => 
+                t.descripcion.toLowerCase().includes('moto')
+            );
 
-        // 3. CAPACIDADES - Buscar en el array "capacidades"
-        const capacidadAutoObj = data.capacidades?.find(c => 
-            c.tipoVehiculoId === 1 || c.tipoVehiculo.nombre.toLowerCase().includes('auto')
-        );
-        const capacidadMotoObj = data.capacidades?.find(c => 
-            c.tipoVehiculoId === 2 || c.tipoVehiculo.nombre.toLowerCase().includes('moto')
-        );
+            tarifaAuto = tarifaAutoPorDesc ? parseFloat(tarifaAutoPorDesc.precioHora) : 0;
+            tarifaMoto = tarifaMotoPorDesc ? parseFloat(tarifaMotoPorDesc.precioHora) : 0;
+        }
 
-        const capacidadAutos = capacidadAutoObj ? capacidadAutoObj.cantidad : 0;
-        const capacidadMotos = capacidadMotoObj ? capacidadMotoObj.cantidad : 0;
+        // 3. CAPACIDADES TEÓRICAS
+        let capacidadAutos = 0;
+        let capacidadMotos = 0;
 
-        // 4. SERVICIOS ACTIVOS - Filtrar servicios con estado true
+        if (data.capacidades && data.capacidades.length > 0) {
+            const capacidadAutoObj = data.capacidades.find(c => c.tipoVehiculoId === 1);
+            const capacidadMotoObj = data.capacidades.find(c => c.tipoVehiculoId === 2);
+            
+            const capacidadAutoPorNombre = capacidadAutoObj || data.capacidades.find(c => 
+                c.tipoVehiculo.nombre.toLowerCase().includes('auto')
+            );
+            const capacidadMotoPorNombre = capacidadMotoObj || data.capacidades.find(c => 
+                c.tipoVehiculo.nombre.toLowerCase().includes('moto')
+            );
+
+            capacidadAutos = capacidadAutoPorNombre ? capacidadAutoPorNombre.cantidad : 0;
+            capacidadMotos = capacidadMotoPorNombre ? capacidadMotoPorNombre.cantidad : 0;
+        }
+
+        // 4. DISPONIBILIDAD REAL - CONTAR PLAZAS DISPONIBLES
+        let disponibilidadAutos = 0;
+        let disponibilidadMotos = 0;
+
+        if (data.plazas && data.plazas.length > 0) {
+            // Contar plazas disponibles por tipo
+            const plazasAutoDisponibles = data.plazas.filter(plaza => 
+                plaza.tipoVehiculoId === 1 && 
+                (plaza.estado === 'DISPONIBLE' || plaza.estado === 'libre' || plaza.estado === null)
+            );
+            
+            const plazasMotoDisponibles = data.plazas.filter(plaza => 
+                plaza.tipoVehiculoId === 2 && 
+                (plaza.estado === 'DISPONIBLE' || plaza.estado === 'libre' || plaza.estado === null)
+            );
+
+            disponibilidadAutos = plazasAutoDisponibles.length;
+            disponibilidadMotos = plazasMotoDisponibles.length;
+
+            console.log('🔄 Disponibilidad real calculada:', {
+                totalPlazasAuto: data.plazas.filter(p => p.tipoVehiculoId === 1).length,
+                totalPlazasMoto: data.plazas.filter(p => p.tipoVehiculoId === 2).length,
+                disponiblesAuto: disponibilidadAutos,
+                disponiblesMoto: disponibilidadMotos
+            });
+        } else {
+            // Si no hay plazas definidas, usar capacidades como disponibilidad
+            disponibilidadAutos = capacidadAutos;
+            disponibilidadMotos = capacidadMotos;
+        }
+
+        // 5. SERVICIOS ACTIVOS
         const serviciosActivos = data.servicios?.filter(s => s.estado) || [];
 
-        // 5. PLAZAS - Separar por tipo de vehículo
-        const plazasAutos = data.plazas?.filter(p => p.tipoVehiculoId === 1) || [];
-        const plazasMotos = data.plazas?.filter(p => p.tipoVehiculoId === 2) || [];
-        
-        const totalPlazasAutos = plazasAutos.length;
-        const totalPlazasMotos = plazasMotos.length;
-
-        console.log('📊 DATOS EXTRAÍDOS DE LA API:', {
+        console.log('📊 DATOS FINALES - OPCIÓN C:', {
             nombre: data.nombre,
-            imagenesCount: imagenes.length,
-            tarifaAuto,
-            tarifaMoto,
             capacidadAutos,
             capacidadMotos,
-            serviciosActivosCount: serviciosActivos.length,
-            plazasAutosCount: totalPlazasAutos,
-            plazasMotosCount: totalPlazasMotos,
-            servicios: serviciosActivos.map(s => s.servicio.nombre)
+            disponibilidadAutos,
+            disponibilidadMotos,
+            formatoDisplay: {
+                autos: `${disponibilidadAutos} / ${capacidadAutos}`,
+                motos: `${disponibilidadMotos} / ${capacidadMotos}`
+            }
         });
 
         return {
@@ -214,11 +245,9 @@ const useParqueoData = (data: ParqueoDetalleAPI | null) => {
             tarifaMoto,
             capacidadAutos,
             capacidadMotos,
+            disponibilidadAutos,
+            disponibilidadMotos,
             serviciosActivos,
-            plazasAutos,
-            plazasMotos,
-            totalPlazasAutos,
-            totalPlazasMotos
         };
     }, [data]);
 };
@@ -262,7 +291,7 @@ const ServiciosAdicionales = ({ servicios }: { servicios: Servicio[] }) => {
                 {servicios.map((servicio, index) => (
                     <View key={index} className="flex-row items-center bg-[#7BB5CB] rounded-full px-3 py-2">
                         <Feather name="check" size={14} color="#F6EEE4" />
-                        <Text className="text-sm text-black ml-1">{servicio.servicio.nombre}</Text>
+                        <Text className="text-sm text-white ml-1">{servicio.servicio.nombre}</Text>
                     </View>
                 ))}
             </View>
@@ -270,46 +299,66 @@ const ServiciosAdicionales = ({ servicios }: { servicios: Servicio[] }) => {
     );
 };
 
-// --- COMPONENTE DETALLE DE PLAZAS ---
-const DetallePlazas = ({ 
-    plazasAutos, 
-    plazasMotos 
+// --- COMPONENTE DETALLE DE CAPACIDADES ACTUALIZADO (OPCIÓN C) ---
+const DetalleCapacidades = ({ 
+    capacidadAutos, 
+    capacidadMotos,
+    disponibilidadAutos,
+    disponibilidadMotos,
+    tarifaAuto,
+    tarifaMoto
 }: { 
-    plazasAutos: Plaza[], 
-    plazasMotos: Plaza[] 
+    capacidadAutos: number, 
+    capacidadMotos: number,
+    disponibilidadAutos: number,
+    disponibilidadMotos: number,
+    tarifaAuto: number,
+    tarifaMoto: number
 }) => {
     return (
         <View className="mt-4">
-            <Text className="text-xl font-bold text-black mb-3">Detalle de Plazas</Text>
+            <Text className="text-xl font-bold text-black mb-3">Detalle de Capacidades</Text>
             
-            {/* Plazas para Autos */}
+            {/* Capacidad para Autos */}
             <View className="mb-4">
-                <Text className="text-lg font-semibold text-black mb-2">Autos ({plazasAutos.length} plazas)</Text>
-                <View className="flex-row flex-wrap gap-2">
-                    {plazasAutos.map((plaza, index) => (
-                        <View key={index} className="bg-[#7BB5CB] rounded-lg px-3 py-2">
-                            <Text className="text-sm text-black font-semibold">{plaza.nroPlaza}</Text>
-                        </View>
-                    ))}
+                <Text className="text-lg font-semibold text-black mb-2">
+                    Autos ({disponibilidadAutos} / {capacidadAutos} espacios)
+                </Text>
+                <View className="flex-row items-center bg-[#7BB5CB] p-3 rounded-lg">
+                    <FontAwesome5 name="car" size={20} color="#F6EEE4" />
+                    <View className="ml-3">
+                        <Text className="text-sm text-white font-semibold">
+                            Tarifa: {tarifaAuto} Bs/h
+                        </Text>
+                        <Text className="text-xs text-white mt-1">
+                            {disponibilidadAutos} de {capacidadAutos} espacios disponibles
+                        </Text>
+                    </View>
                 </View>
             </View>
 
-            {/* Plazas para Motos */}
+            {/* Capacidad para Motos */}
             <View>
-                <Text className="text-lg font-semibold text-black mb-2">Motos ({plazasMotos.length} plazas)</Text>
-                <View className="flex-row flex-wrap gap-2">
-                    {plazasMotos.map((plaza, index) => (
-                        <View key={index} className="bg-[#FD721D] rounded-lg px-3 py-2">
-                            <Text className="text-sm text-white font-semibold">{plaza.nroPlaza}</Text>
-                        </View>
-                    ))}
+                <Text className="text-lg font-semibold text-black mb-2">
+                    Motos ({disponibilidadMotos} / {capacidadMotos} espacios)
+                </Text>
+                <View className="flex-row items-center bg-[#FD721D] p-3 rounded-lg">
+                    <FontAwesome5 name="motorcycle" size={20} color="#F6EEE4" />
+                    <View className="ml-3">
+                        <Text className="text-sm text-white font-semibold">
+                            Tarifa: {tarifaMoto} Bs/h
+                        </Text>
+                        <Text className="text-xs text-white mt-1">
+                            {disponibilidadMotos} de {capacidadMotos} espacios disponibles
+                        </Text>
+                    </View>
                 </View>
             </View>
         </View>
     );
 };
 
-// --- Pantalla Principal COMPLETAMENTE CORREGIDA ---
+// --- Pantalla Principal ACTUALIZADA (OPCIÓN C) ---
 export default function DetalleParqueoScreen() {
     const { id } = useLocalSearchParams();
     const router = useRouter();
@@ -327,11 +376,9 @@ export default function DetalleParqueoScreen() {
         tarifaMoto, 
         capacidadAutos, 
         capacidadMotos, 
+        disponibilidadAutos,
+        disponibilidadMotos,
         serviciosActivos,
-        plazasAutos,
-        plazasMotos,
-        totalPlazasAutos,
-        totalPlazasMotos
     } = useParqueoData(data);
 
     useFocusEffect(
@@ -350,7 +397,6 @@ export default function DetalleParqueoScreen() {
                 setError(null);
                 
                 try {
-                    // Usar endpoint de lista completa
                     const url = `https://parkado-backend.vercel.app/api/parqueos/details`;
                     console.log(`🌐 HACIENDO FETCH A: ${url}`);
                     
@@ -372,8 +418,9 @@ export default function DetalleParqueoScreen() {
                         id: parqueoEncontrado.id,
                         fotos: parqueoEncontrado.fotos?.length || 0,
                         servicios: parqueoEncontrado.servicios?.length || 0,
-                        capacidades: parqueoEncontrado.capacidades,
-                        tarifas: parqueoEncontrado.tarifas,
+                        capacidades: parqueoEncontrado.capacidades?.length || 0,
+                        tarifas: parqueoEncontrado.tarifas?.length || 0,
+                        horarios: parqueoEncontrado.horarios?.length || 0,
                         plazas: parqueoEncontrado.plazas?.length || 0
                     });
 
@@ -405,11 +452,13 @@ export default function DetalleParqueoScreen() {
             tarifaMoto: tarifaMoto.toString(),
             capacidadAutos: capacidadAutos.toString(),
             capacidadMotos: capacidadMotos.toString(),
+            disponibilidadAutos: disponibilidadAutos.toString(),
+            disponibilidadMotos: disponibilidadMotos.toString(),
             parqueoLat: data.latitud?.toString() || '-17.3936',
             parqueoLng: data.longitud?.toString() || '-66.1569',
         };
 
-        console.log(`🚀 Navegando a Reserva con datos REALES:`, paramsToPass);
+        console.log(`🚀 Navegando a Reserva con datos OPCIÓN C:`, paramsToPass);
         router.push({
             pathname: '/reserva' as any,
             params: paramsToPass
@@ -421,7 +470,7 @@ export default function DetalleParqueoScreen() {
         return (
             <View className="flex-1 items-center justify-center bg-[#F6EEE4]">
                 <ActivityIndicator size="large" color="#7BB5CB" />
-                <Text className="mt-4 text-base text-black">Cargando información...</Text>
+                <Text className="mt-4 text-base text-black">Cargando información del parqueo...</Text>
             </View>
         );
     }
@@ -482,22 +531,27 @@ export default function DetalleParqueoScreen() {
                     </Text>
                     <RatingStars rating={averageRating} />
                     <Text className="text-xs text-black ml-2">
-                        ({reviewCount} opiniones)
+                        ({reviewCount} {reviewCount === 1 ? 'opinión' : 'opiniones'})
                     </Text>
                 </View>
 
                 {/* Fila de Acciones */}
-                <View className="flex-row justify-between border-b border-black pb-4 mb-4">
+                <View className="flex-row justify-between border-b border-gray-300 pb-4 mb-4">
                     <TouchableOpacity className="items-center w-1/5">
                         <Feather name="bookmark" size={24} color="#7BB5CB" />
-                        <Text className="text-xs mt-1">Guardar</Text>
+                        <Text className="text-xs mt-1 text-black">Guardar</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        className="items-center justify-center w-2/5 bg-black rounded-lg py-2"
+                        className="items-center justify-center w-2/5 bg-[#FD721D] rounded-lg py-2 shadow-lg"
                         onPress={handleNavigateToReserva}
                     >
-                        <Text className="text-sm font-bold text-[#F6EEE4]">RESERVAR</Text>
+                        <Text className="text-sm font-bold text-white">RESERVAR</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity className="items-center w-1/5">
+                        <Feather name="share-2" size={24} color="#7BB5CB" />
+                        <Text className="text-xs mt-1 text-black">Compartir</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -510,26 +564,26 @@ export default function DetalleParqueoScreen() {
                 {/* Galería de Imágenes */}
                 <GaleriaImagenes imagenes={imagenes} />
 
-                {/* Capacidades y Tarifas */}
+                {/* Capacidades y Tarifas - OPCIÓN C: "disponibles/totales" */}
                 <Text className="text-xl font-bold text-black mt-4 mb-3">Capacidades y Tarifas</Text>
                 <View className="flex-row flex-wrap justify-between">
                     {/* Auto */}
-                    <View className="w-[48%] bg-[#7BB5CB] p-3 rounded-lg mb-2 flex-row items-center">
+                    <View className="w-[48%] bg-[#7BB5CB] p-3 rounded-lg mb-2 flex-row items-center shadow-sm">
                         <FontAwesome5 name="car" size={24} color="#F6EEE4" />
                         <View className="ml-3">
-                            <Text className="text-xs font-semibold text-black">Auto</Text>
-                            <Text className="text-xl font-bold text-black">{capacidadAutos} espacios</Text>
-                            <Text className="text-xs text-black">{tarifaAuto} Bs/h</Text>
+                            <Text className="text-xs font-semibold text-white">Auto</Text>
+                            <Text className="text-xl font-bold text-white">{disponibilidadAutos} / {capacidadAutos}</Text>
+                            <Text className="text-xs text-white">{tarifaAuto} Bs/h</Text>
                         </View>
                     </View>
                     
                     {/* Moto */}
-                    <View className="w-[48%] bg-[#7BB5CB] p-3 rounded-lg mb-2 flex-row items-center">
+                    <View className="w-[48%] bg-[#FD721D] p-3 rounded-lg mb-2 flex-row items-center shadow-sm">
                         <FontAwesome5 name="motorcycle" size={24} color="#F6EEE4" />
                         <View className="ml-3">
-                            <Text className="text-xs font-semibold text-black">Moto</Text>
-                            <Text className="text-xl font-bold text-black">{capacidadMotos} espacios</Text>
-                            <Text className="text-xs text-black">{tarifaMoto} Bs/h</Text>
+                            <Text className="text-xs font-semibold text-white">Moto</Text>
+                            <Text className="text-xl font-bold text-white">{disponibilidadMotos} / {capacidadMotos}</Text>
+                            <Text className="text-xs text-white">{tarifaMoto} Bs/h</Text>
                         </View>
                     </View>
                 </View>
@@ -548,23 +602,34 @@ export default function DetalleParqueoScreen() {
                         ? `${formatHour(horarioDia.horaAbrir)} - ${formatHour(horarioDia.horaCerrar)}`
                         : 'Cerrado';
                     return (
-                        <View key={index} className="flex-row items-center mb-1">
-                            <Feather name="calendar" size={16} color={esCerrado ? '#5f8b9cff' : '#7bb5cbff'} />
-                            <Text className="text-sm text-black ml-3 font-semibold w-20">
+                        <View key={index} className="flex-row items-center mb-2">
+                            <Feather 
+                                name="calendar" 
+                                size={16} 
+                                color={esCerrado ? '#9CA3AF' : '#7BB5CB'} 
+                            />
+                            <Text className="text-sm text-black ml-3 font-semibold w-24">
                                 {day.charAt(0).toUpperCase() + day.slice(1)}:
                             </Text>
-                            <Text className={`text-sm ml-2 ${esCerrado ? ' font-bold' : 'text-black'}`}>
+                            <Text className={`text-sm ml-2 ${esCerrado ? 'text-gray-500' : 'text-black'}`}>
                                 {horarioTexto}
                             </Text>
                         </View>
                     );
                 })}
 
-                {/* Detalle de Plazas */}
-                <DetallePlazas 
-                    plazasAutos={plazasAutos} 
-                    plazasMotos={plazasMotos} 
+                {/* Detalle de Capacidades (OPCIÓN C) */}
+                <DetalleCapacidades 
+                    capacidadAutos={capacidadAutos}
+                    capacidadMotos={capacidadMotos}
+                    disponibilidadAutos={disponibilidadAutos}
+                    disponibilidadMotos={disponibilidadMotos}
+                    tarifaAuto={tarifaAuto}
+                    tarifaMoto={tarifaMoto}
                 />
+
+                {/* Espacio al final para mejor scroll */}
+                <View className="h-8" />
             </View>
         </ScrollView>
     );

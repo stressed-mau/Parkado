@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -13,6 +14,25 @@ import {
     View,
 } from "react-native";
 import Logo from "../../assets/Logo";
+
+// ✅ FUNCIÓN PARA DECODIFICAR JWT
+const decodeJWT = (token: string) => {
+  try {
+    // Un JWT tiene 3 partes: header.payload.signature
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (error) {
+    console.error('Error decodificando JWT:', error);
+    return null;
+  }
+};
 
 export default function LoginUsuario() {
   const router = useRouter();
@@ -41,22 +61,56 @@ export default function LoginUsuario() {
         }
       );
 
+      console.log("🔍 Respuesta del servidor:", response.data);
+
+      // ✅ EXTRAER DATOS DEL TOKEN JWT
+      const token = response.data.token;
+      
+      if (!token) {
+        throw new Error("No se recibió token del servidor");
+      }
+
+      // Decodificar el token JWT para obtener el ID del usuario
+      const decodedToken = decodeJWT(token);
+      console.log("🔍 Token decodificado:", decodedToken);
+
+      if (!decodedToken || !decodedToken.id) {
+        throw new Error("No se pudo obtener el ID del usuario del token");
+      }
+
+      // ✅ CREAR OBJETO DE USUARIO
+      const userData = {
+        token: token,
+        id: decodedToken.id, // ← ID extraído del token JWT
+        email: correo, // Usamos el correo que ingresó el usuario
+        nombre: 'Usuario Parkado' // Nombre por defecto
+      };
+
+      console.log("✅ Datos del usuario:", userData);
+
+      // ✅ GUARDAR EN ASYNC STORAGE
+      await AsyncStorage.setItem('userData', JSON.stringify(userData));
+      
+      // Verificar que se guardó correctamente
+      const storedData = await AsyncStorage.getItem('userData');
+      console.log("✅ Verificación - Datos guardados:", storedData);
+
       Alert.alert(
         "✅ Inicio de sesión exitoso",
-        response.data.message || "Bienvenido a Parkado"
+        `Bienvenido a Parkado!\nTu ID de usuario es: ${userData.id}`,
+         
       );
 
-      console.log("Usuario autenticado:", response.data);
+      console.log("Usuario autenticado y guardado:", userData);
 
       setCorreo("");
       setPassword("");
 
-      // Redirigir después de iniciar sesión
-      // router.replace("/(tabs)/Home");
     } catch (error: any) {
       console.error("Error al iniciar sesión:", error);
       const msg =
         error.response?.data?.message ||
+        error.message ||
         "No se pudo iniciar sesión. Verifica tus credenciales.";
       Alert.alert("❌ Error", msg);
     } finally {

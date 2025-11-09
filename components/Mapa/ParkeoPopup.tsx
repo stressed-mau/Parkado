@@ -61,6 +61,15 @@ type Servicio = {
     };
 };
 
+type Plaza = {
+    id: number;
+    nroPlaza: string;
+    ubicacionPiso: string | null;
+    estado: string | null;
+    parqueoId: number;
+    tipoVehiculoId: number;
+};
+
 // ✅ TIPO CORREGIDO para coincidir con la API REAL
 type Parqueo = {
     id: number;  // ✅ CAMBIADO a number
@@ -72,7 +81,7 @@ type Parqueo = {
     calificaciones: Calificacion[];
     capacidades: Capacidad[];
     servicios: Servicio[];
-    plazas: any[];
+    plazas: Plaza[];
     tarifas: Tarifa[];
     fotos: Foto[];
     latitud: number;
@@ -87,7 +96,7 @@ interface ParkeoPopupProps {
     showingDirections?: boolean;
 }
 
-// --- ESTILOS (se mantienen igual) ---
+// --- ESTILOS ACTUALIZADOS ---
 const styles = StyleSheet.create({
     overlay: {
         ...StyleSheet.absoluteFillObject,
@@ -191,6 +200,43 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         fontWeight: '500',
     },
+    // NUEVOS ESTILOS PARA OPCIÓN C
+    disponibilidadContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 4,
+        gap: 8,
+    },
+    disponibilidadItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(123, 181, 203, 0.1)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+    },
+    disponibilidadText: { 
+        fontSize: 11, 
+        fontWeight: '600',
+    },
+    disponibilidadAuto: { 
+        color: '#7BB5CB',
+    },
+    disponibilidadMoto: { 
+        color: '#FD721D',
+    },
+    disponibilidadDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        marginRight: 4,
+    },
+    disponibilidadDotAuto: {
+        backgroundColor: '#7BB5CB',
+    },
+    disponibilidadDotMoto: {
+        backgroundColor: '#FD721D',
+    },
     availabilityContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -251,7 +297,7 @@ const styles = StyleSheet.create({
     },
 });
 
-// --- COMPONENTE PRINCIPAL CORREGIDO ---
+// --- COMPONENTE PRINCIPAL ACTUALIZADO (OPCIÓN C) ---
 const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
     details,
     onClose,
@@ -260,7 +306,7 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
 }) => {
     const router = useRouter();
 
-    // --- FUNCIONES AUXILIARES MEJORADAS con DEBUG ---
+    // --- FUNCIONES AUXILIARES MEJORADAS con OPCIÓN C ---
 
     const RatingStars = useCallback(({ count }: { count: number }) => {
         const fullStars = Math.floor(count);
@@ -336,36 +382,55 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
         return resultado;
     };
 
-    // ✅ Función MEJORADA para obtener capacidades con DEBUG
-    const getCapacidades = (capacidades: Capacidad[]) => {
-        console.log('🅿️ Capacidades recibidas en Popup:', capacidades);
-        
-        if (!capacidades || capacidades.length === 0) {
-            console.log('❌ No hay capacidades disponibles');
-            return { autos: 0, motos: 0, tieneDatos: false };
-        }
-        
-        const capacidadAutos = capacidades.find(c => c.tipoVehiculoId === 1);
-        const capacidadMotos = capacidades.find(c => c.tipoVehiculoId === 2);
-        
-        console.log('🔍 Capacidades encontradas:', { capacidadAutos, capacidadMotos });
-        
-        const resultado = {
-            autos: capacidadAutos ? capacidadAutos.cantidad : 0,
-            motos: capacidadMotos ? capacidadMotos.cantidad : 0,
-            tieneDatos: !!(capacidadAutos || capacidadMotos)
-        };
-        
-        console.log('✅ Capacidades procesadas:', resultado);
-        return resultado;
-    };
+    // ✅ Función NUEVA para OPCIÓN C: Calcular disponibilidad real
+    const getDisponibilidadReal = (capacidades: Capacidad[], plazas: Plaza[]) => {
+        console.log('🅿️ Calculando disponibilidad real:', {
+            capacidades,
+            totalPlazas: plazas?.length
+        });
 
-    // ✅ Función MEJORADA para calcular disponibilidad
-    const getDisponibilidad = (capacidades: Capacidad[]) => {
-        const caps = getCapacidades(capacidades);
-        const disponible = caps.autos > 0 || caps.motos > 0;
-        console.log('📊 Disponibilidad calculada:', disponible, caps);
-        return disponible;
+        // Obtener capacidades teóricas
+        const capacidadAutoObj = capacidades?.find(c => c.tipoVehiculoId === 1);
+        const capacidadMotoObj = capacidades?.find(c => c.tipoVehiculoId === 2);
+        
+        const capacidadAutos = capacidadAutoObj ? capacidadAutoObj.cantidad : 0;
+        const capacidadMotos = capacidadMotoObj ? capacidadMotoObj.cantidad : 0;
+
+        // Calcular disponibilidad real contando plazas disponibles
+        let disponibilidadAutos = 0;
+        let disponibilidadMotos = 0;
+
+        if (plazas && plazas.length > 0) {
+            const plazasAutoDisponibles = plazas.filter(plaza => 
+                plaza.tipoVehiculoId === 1 && 
+                (plaza.estado === 'DISPONIBLE' || plaza.estado === 'libre' || plaza.estado === null)
+            );
+            
+            const plazasMotoDisponibles = plazas.filter(plaza => 
+                plaza.tipoVehiculoId === 2 && 
+                (plaza.estado === 'DISPONIBLE' || plaza.estado === 'libre' || plaza.estado === null)
+            );
+
+            disponibilidadAutos = plazasAutoDisponibles.length;
+            disponibilidadMotos = plazasMotoDisponibles.length;
+        } else {
+            // Si no hay plazas definidas, usar capacidades como disponibilidad
+            disponibilidadAutos = capacidadAutos;
+            disponibilidadMotos = capacidadMotos;
+        }
+
+        const resultado = {
+            capacidadAutos,
+            capacidadMotos,
+            disponibilidadAutos,
+            disponibilidadMotos,
+            formatoAuto: `${disponibilidadAutos} / ${capacidadAutos}`,
+            formatoMoto: `${disponibilidadMotos} / ${capacidadMotos}`,
+            tieneDisponibilidad: (disponibilidadAutos > 0 || disponibilidadMotos > 0)
+        };
+
+        console.log('✅ Disponibilidad real calculada:', resultado);
+        return resultado;
     };
 
     // ✅ Función MEJORADA para calcular rating
@@ -377,7 +442,6 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
             return 0;
         }
         
-        // ❗️IMPORTANTE: La API devuelve puntuacion como string
         const suma = calificaciones.reduce((acc, cal) => {
             const puntuacion = parseFloat(cal.puntuacion) || 0;
             return acc + puntuacion;
@@ -416,18 +480,20 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
 
         // Obtener datos REALES de la API
         const tarifasInfo = getTarifas(details.tarifas);
-        const capacidadesInfo = getCapacidades(details.capacidades);
+        const disponibilidadInfo = getDisponibilidadReal(details.capacidades, details.plazas);
         const ratingPromedio = getRatingPromedio(details.calificaciones);
 
         // Preparar parámetros para navegación
         const params = {
-            id: details.id.toString(), // ✅ Convertir a string para la ruta
+            id: details.id.toString(),
             parqueoNombre: details.nombre,
             direccion: details.direccion,
             tarifaAuto: tarifasInfo.auto.replace(' Bs/h', '').replace('N/A', '0'),
             tarifaMoto: tarifasInfo.moto.replace(' Bs/h', '').replace('N/A', '0'),
-            capacidadAutos: capacidadesInfo.autos.toString(),
-            capacidadMotos: capacidadesInfo.motos.toString(),
+            capacidadAutos: disponibilidadInfo.capacidadAutos.toString(),
+            capacidadMotos: disponibilidadInfo.capacidadMotos.toString(),
+            disponibilidadAutos: disponibilidadInfo.disponibilidadAutos.toString(),
+            disponibilidadMotos: disponibilidadInfo.disponibilidadMotos.toString(),
             parqueoLat: details.latitud.toString(),
             parqueoLng: details.longitud.toString(),
             rating: ratingPromedio.toFixed(1),
@@ -437,7 +503,7 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
             fotos: JSON.stringify(details.fotos || [])
         };
 
-        console.log('🚀 Navegando a detalles con params:', params);
+        console.log('🚀 Navegando a detalles con params OPCIÓN C:', params);
         
         router.push({
             pathname: '/parqueo-detalle/[id]' as any,
@@ -477,6 +543,8 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
         tieneTarifas: !!details?.tarifas?.length, 
         tarifasCount: details?.tarifas?.length,
         tieneCapacidades: !!details?.capacidades?.length,
+        tienePlazas: !!details?.plazas?.length,
+        plazasCount: details?.plazas?.length,
         datosCompletos: details
     });
 
@@ -499,27 +567,22 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
         horarios = [], 
         tarifas = [], 
         capacidades = [],
+        plazas = [],
         calificaciones = [],
         fotos = []
     } = details;
 
     const ratingPromedio = getRatingPromedio(calificaciones);
-    const disponible = getDisponibilidad(capacidades);
     const horarioFormateado = getHorarioFormateado(horarios);
     const tarifasInfo = getTarifas(tarifas);
-    const capacidadesInfo = getCapacidades(capacidades);
+    const disponibilidadInfo = getDisponibilidadReal(capacidades, plazas);
     const imageUri = getImagenPrincipal(fotos);
 
-    // Textos informativos
-    const availabilityText = disponible ? "Disponible" : "Completo";
-    const availabilityColor = disponible ? styles.availabilityTextAvailable : styles.availabilityTextFull;
-    const availabilityDot = disponible ? styles.availabilityDotAvailable : styles.availabilityDotFull;
-
+    // Textos informativos para OPCIÓN C
     const detailsText = `Horario: ${horarioFormateado}`;
     const tarifasText = `Tarifas: Auto ${tarifasInfo.auto}, Moto ${tarifasInfo.moto}`;
-    const capacityText = `Capacidad: ${capacidadesInfo.autos} autos, ${capacidadesInfo.motos} motos`;
 
-    // --- RENDER PRINCIPAL ---
+    // --- RENDER PRINCIPAL ACTUALIZADO (OPCIÓN C) ---
     return (
         <View style={styles.overlay}>
             <View style={styles.card}>
@@ -560,13 +623,41 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
                         {/* DETALLES */}
                         <Text style={styles.detailsText} numberOfLines={2}>{detailsText}</Text>
                         <Text style={styles.detailsText} numberOfLines={1}>{tarifasText}</Text>
-                        <Text style={styles.capacityText} numberOfLines={1}>{capacityText}</Text>
 
-                        {/* DISPONIBILIDAD */}
+                        {/* DISPONIBILIDAD - OPCIÓN C: "disponibles/totales" */}
+                        <View style={styles.disponibilidadContainer}>
+                            {/* Auto */}
+                            <View style={styles.disponibilidadItem}>
+                                <View style={[styles.disponibilidadDot, styles.disponibilidadDotAuto]} />
+                                <Text style={[styles.disponibilidadText, styles.disponibilidadAuto]}>
+                                    Auto: {disponibilidadInfo.formatoAuto}
+                                </Text>
+                            </View>
+                            
+                            {/* Moto */}
+                            <View style={styles.disponibilidadItem}>
+                                <View style={[styles.disponibilidadDot, styles.disponibilidadDotMoto]} />
+                                <Text style={[styles.disponibilidadText, styles.disponibilidadMoto]}>
+                                    Moto: {disponibilidadInfo.formatoMoto}
+                                </Text>
+                            </View>
+                        </View>
+
+                        {/* INDICADOR GENERAL DE DISPONIBILIDAD */}
                         <View style={styles.availabilityContainer}>
-                            <View style={[styles.availabilityDot, availabilityDot]} />
-                            <Text style={[styles.availabilityText, availabilityColor]}>
-                                {availabilityText}
+                            <View style={[
+                                styles.availabilityDot, 
+                                disponibilidadInfo.tieneDisponibilidad 
+                                    ? styles.availabilityDotAvailable 
+                                    : styles.availabilityDotFull
+                            ]} />
+                            <Text style={[
+                                styles.availabilityText, 
+                                disponibilidadInfo.tieneDisponibilidad 
+                                    ? styles.availabilityTextAvailable 
+                                    : styles.availabilityTextFull
+                            ]}>
+                                {disponibilidadInfo.tieneDisponibilidad ? "Disponible" : "Completo"}
                             </Text>
                         </View>
                     </View>
@@ -578,9 +669,12 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
                         onPress={handleNavigateToDetails} 
                         style={[styles.buttonBase, styles.buttonPrimary]} 
                         activeOpacity={0.8}
+                        disabled={!disponibilidadInfo.tieneDisponibilidad}
                     >
                         <Feather name="calendar" size={16} color="#F6EEE4" />
-                        <Text style={styles.buttonText}>Reservar</Text>
+                        <Text style={styles.buttonText}>
+                            {disponibilidadInfo.tieneDisponibilidad ? "Reservar" : "Completo"}
+                        </Text>
                     </TouchableOpacity>
 
                     {onShowDirections && (

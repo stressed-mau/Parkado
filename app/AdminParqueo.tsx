@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from "react-native";
-import ResumenCard from "./components/admin/ResumenCard";
+import ResumenCard from "@/components/admin/ResumenCard";
 import { getTarifasYPlazas, getPlazas, getReservasPorParqueo } from "../api/parqueoApi";
 import { FontAwesome, FontAwesome5 } from '@expo/vector-icons';
 

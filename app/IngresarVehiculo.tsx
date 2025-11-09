@@ -55,8 +55,6 @@ export default function IngresarVehiculo() {
   }
 };
 
-
-
   const calcularMonto = () => {
     // Aquí iría la lógica para calcular el monto total
     // basado en las fechas y horas seleccionadas

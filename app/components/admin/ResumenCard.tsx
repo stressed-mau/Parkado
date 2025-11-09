@@ -14,7 +14,7 @@ export default function ResumenCard({
     capacidad: number;
     tarifa: string;
     color: string;
-    icon: string;
+    icon: React.ReactNode;
 }) {
     return (
         <View style={{
@@ -32,10 +32,10 @@ export default function ResumenCard({
             borderColor: '#eee',
             marginHorizontal: 6,
         }}>
-            <Text style={{ fontSize: 24 }}>{icon}</Text>
-            <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 5, color }}>{label}</Text>
+            {icon}
+            <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 5 }}>{label}</Text>
             <Text style={{ fontSize: 17 }}>{ocupados} / {capacidad}</Text>
-            <Text style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Tarifa: <Text style={{ color }}>{tarifa}</Text></Text>
+            <Text style={{ fontSize: 13, marginTop: 2 }}>{tarifa}</Text>
         </View>
     );
 }

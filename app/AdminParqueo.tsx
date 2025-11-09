@@ -6,37 +6,44 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import ResumenCard from "./components/admin/ResumenCard";
-import { getTarifasYPlazas, getPlazas } from "../api/parqueoApi";
-
-
+import { getTarifasYPlazas, getPlazas, getReservasPorParqueo } from "../api/parqueoApi";
+import { FontAwesome, FontAwesome5 } from '@expo/vector-icons';
 
 export default function ParqueoDetalle() {
   const [tarifas, setTarifas] = useState<any[]>([]);
   const [plazas, setPlazas] = useState<any[]>([]);
+  const [reservas, setReservas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<"Todos" | "Auto" | "Moto">("Todos");
   const [plazasOpen, setPlazasOpen] = useState(false); // Nuevo estado para colapsable
   const [vehiculosOpen, setVehiculosOpen] = useState(false);
 
-  const idParqueo = 3; // puedes cambiarlo o pasarlo por props
+  const idParqueo = 1; // puedes cambiarlo o pasarlo por props
 
   useEffect(() => {
     const cargarDatos = async () => {
       try {
         setLoading(true);
-        const tarifasData = await getTarifasYPlazas();
-        setTarifas(tarifasData);
 
-        const plazasData = await getPlazas(idParqueo);
+        const [tarifasData, plazasData, reservasData] = await Promise.all([
+          getTarifasYPlazas(),
+          getPlazas(idParqueo),
+          getReservasPorParqueo(idParqueo),
+        ]);
+
+        setTarifas(tarifasData);
         setPlazas(plazasData);
+        setReservas(reservasData);
       } catch (error) {
         Alert.alert("Error", "No se pudieron cargar los datos del parqueo");
       } finally {
         setLoading(false);
       }
     };
+
     cargarDatos();
   }, []);
 
@@ -46,22 +53,32 @@ export default function ParqueoDetalle() {
     return p.tipoVehiculo?.nombre === filter;
   });
 
+  const formatearFecha = (fecha: string) => {
+    const d = new Date(fecha);
+    return d.toLocaleDateString();
+  };
+
+  const formatearHora = (fecha: string) => {
+    const d = new Date(fecha);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
   // Asigna color de fondo según el estado
   const getEstadoColor = (estado: string | null) => {
     switch (estado) {
       case "OCUPADO":
-        return "bg-red-300 border-red-600";
+        return "bg-[#FD721D] border-[#FD721D]";
       case "RESERVA":
-        return "bg-yellow-300 border-yellow-600";
+        return "bg-[#F2BD2B] border-[#F2BD2B]";
       case "DISPONIBLE":
       default:
-        return "bg-green-300 border-green-600";
+        return "bg-[#8bb23f] border-[#8bb23f]";
     }
   };
 
   return (
     <View className="flex-1 p-6 bg-[#F6EEE4]">
-      <Text className="text-2xl font-bold my-7 text-red-600 self-center">
+      <Text className="text-2xl font-bold my-7 text-[#22485A] self-center">
         PARQUEO N° 1
       </Text>
 
@@ -75,13 +92,13 @@ export default function ParqueoDetalle() {
             capacidad={item.plazasTotales}
             tarifa={`${item.tarifaHora} Bs/h`}
             color={item.tipoVehiculo === "Auto" ? "#2980b9" : "#8e44ad"}
-            icon={item.tipoVehiculo === "Auto" ? "🚗" : "🛵"}
+            icon={item.tipoVehiculo === "Auto" ? <FontAwesome5 name="car-side" size={24} color="#2980b9" /> : <FontAwesome5 name="motorcycle" size={24} color="#2980b9" />}
           />
         ))}
       </View>
 
       {/* --- Filtros (Autos / Motos / Todos) --- */}
-      <View className="flex-row justify-center mb-4">
+      <View className="flex-row justify-start mb-4">
         {["Auto", "Moto", "Todos"].map((tipo) => (
           <TouchableOpacity
             key={tipo}
@@ -91,7 +108,7 @@ export default function ParqueoDetalle() {
                 ? tipo === "Auto"
                   ? "bg-blue-400 border-blue-500"
                   : tipo === "Moto"
-                  ? "bg-orange-400 border-orange-500"
+                  ? "bg-blue-400 border-blue-500"
                   : "bg-gray-400 border-gray-500"
                 : "bg-white border-gray-300"
             }`}
@@ -101,7 +118,7 @@ export default function ParqueoDetalle() {
                 filter === tipo ? "text-white" : "text-gray-600"
               }`}
             >
-              {tipo === "Auto" ? "🚗 Autos" : tipo === "Moto" ? "🛵 Motos" : "Todos"}
+              {tipo === "Auto" ? "Autos" : tipo === "Moto" ? "Motos" : "Todos"}
             </Text>
           </TouchableOpacity>
         ))}
@@ -109,9 +126,9 @@ export default function ParqueoDetalle() {
 
       <TouchableOpacity
         onPress={() => setPlazasOpen(!plazasOpen)}
-        className="mb-3 w-full px-4 py-2 bg-gray-300 rounded-xl self-start"
+        className="mb-3 w-full px-4 py-2 bg-[#7bb3cd] rounded-xl self-start"
       >
-        <Text className="font-semibold">
+        <Text className="font-semibold text-white">
           {plazasOpen ? "∆ Ocultar plazas" : "∇ Mostrar plazas"}
         </Text>
       </TouchableOpacity>
@@ -125,7 +142,7 @@ export default function ParqueoDetalle() {
             <FlatList
               data={plazasFiltradas}
               keyExtractor={(item) => item.id.toString()}
-              numColumns={3}
+              numColumns={4}
               columnWrapperStyle={{
                 justifyContent: "space-between",
                 marginBottom: 10,
@@ -150,37 +167,49 @@ export default function ParqueoDetalle() {
 
       <TouchableOpacity
         onPress={() => setVehiculosOpen(!vehiculosOpen)}
-        className="mb-3 w-full px-4 py-2 bg-gray-300 rounded-xl self-start"
+        className="mb-3 w-full px-4 py-2 bg-[#7bb3cd] rounded-xl self-start"
       >
-        <Text className="font-semibold">
+        <Text className="font-semibold text-white">
           {vehiculosOpen ? "∆ Mostrar vehiculos en el parqueo" : "∇ Mostrar vehiculos en el parqueo"}
         </Text>
       </TouchableOpacity>
 
-            {vehiculosOpen && (
-        <View className="bg-white p-3 rounded-xl border mb-5">
+      {vehiculosOpen && (
+        <View className="bg-[#e4ecf6] border-[#087E88] p-3 rounded-xl border mb-5">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={{ minWidth: 800 }}>
+              {/* Encabezado */}
+              <View className="flex-row border-[#087E88] border-b pb-2 mb-2">
+                <Text className="flex-1 font-bold text-[#055158]">Placa</Text>
+                <Text className="flex-1 font-bold text-[#055158]">Tipo</Text>
+                <Text className="flex-1 font-bold text-[#055158]">Espacio</Text>
+                <Text className="flex-1 font-bold text-[#055158]">Fecha Inicio</Text>
+                <Text className="flex-1 font-bold text-[#055158]">Hora Inicio</Text>
+                <Text className="flex-1 font-bold text-[#055158]">Fecha Fin</Text>
+                <Text className="flex-1 font-bold text-[#055158]">Hora Fin</Text>
+              </View>
 
-          {/* Encabezado */}
-          <View className="flex-row border-b pb-2 mb-2">
-            <Text className="flex-1 font-bold">Placa</Text>
-            <Text className="flex-1 font-bold">Tipo</Text>
-            <Text className="flex-1 font-bold">Espacio</Text>
-            <Text className="flex-1 font-bold">Fecha</Text>
-            <Text className="flex-1 font-bold">Inicio</Text>
-            <Text className="flex-1 font-bold">Fin</Text>
-          </View>
-
-          {/* Lista */}
-          
-            <View className="flex-row py-1 border-b">
-              <Text className="flex-1">AUTO-123</Text>
-              <Text className="flex-1">Auto</Text>
-              <Text className="flex-1"> A-03 </Text>
-              <Text className="flex-1">08/11/2025</Text>
-              <Text className="flex-1">5:12:03 p.m.</Text>
-              <Text className="flex-1">--</Text>
+              {reservas.length === 0 ? (
+                <Text className="text-gray-500 text-center">No hay vehículos registrados</Text>
+              ) : (
+                reservas.slice(0, 5).map((r) => (
+                  <View key={r.id} className="flex-row border-[#087E88] py-1 border-b">
+                    <Text className="flex-1">{r.matriculaVehiculo}</Text>
+                    <Text className="flex-1">{r.plaza.tipoVehiculo?.nombre}</Text>
+                    <Text className="flex-1">{r.plaza?.nroPlaza}</Text>
+                    <Text className="flex-1">{formatearFecha(r.fechaHoraIni)}</Text>
+                    <Text className="flex-1">{formatearHora(r.fechaHoraIni)}</Text>
+                    <Text className="flex-1">
+                      {r.fechaHoraFin ? formatearFecha(r.fechaHoraFin) : "--"}
+                    </Text>
+                    <Text className="flex-1">
+                      {r.fechaHoraFin ? formatearHora(r.fechaHoraFin) : "--"}
+                    </Text>
+                  </View>
+                ))
+              )}
             </View>
-         
+          </ScrollView>
         </View>
       )}
 

@@ -1,9 +1,17 @@
 import { Tabs } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useState } from "react"; 
+import SplashScreen from "@/components/ui/SplashScreen";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const [showSplash, setShowSplash] = useState(true);
+  if (showSplash) { 
+    return <SplashScreen onFinish={() => 
+      setShowSplash(false)} 
+      />; 
+    }
 
   return (
     <Tabs

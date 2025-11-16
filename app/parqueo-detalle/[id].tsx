@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
-import CommentSection from '@/src/features/comments/screens/CommentSection';
-import ReviewsContent from '@/src/features/comments/components/Reviews';
+import ReviewsModal from '@/components/Comment/Reviews';
+
 // --- TIPOS DE DATOS COMPLETOS ---
 interface Calificacion { 
     puntuacion: string; 
@@ -368,7 +368,8 @@ export default function DetalleParqueoScreen() {
     const [data, setData] = useState<ParqueoDetalleAPI | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [modalVisible, setModalVisible] = useState(false);
+      const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
+
 
     const { averageRating, reviewCount } = useParqueoStats(data);
     const { 
@@ -493,9 +494,12 @@ export default function DetalleParqueoScreen() {
         );
     }
 
+    
+
     // --- Render Principal ---
     return (
-        <ScrollView className="flex-1 bg-[#F6EEE4]" showsVerticalScrollIndicator={false}>
+        <View className="flex-1 bg-[#F6EEE4]">
+        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
             {/* Contenedor de Imagen Principal */}
             <View className="w-full h-64 overflow-hidden relative">
                 <Image
@@ -536,7 +540,7 @@ export default function DetalleParqueoScreen() {
                         ({reviewCount} {reviewCount === 1 ? 'opinión' : 'opiniones'})
                     </Text>
                     {/* MOSTRAR MODAL DE RESENIAS Y CALIFICACIONES */}
-                    <TouchableOpacity onPress={() => setModalVisible(true)} className="mx-20 px-4 rounded-lg py-2 shadow-lg border-2 bg-[#7BB5CB] border-[#7BB5CB] hover:[#FD721D] hover:text-[#7BB5CB]">
+                    <TouchableOpacity onPress={() => setReviewsModalVisible(true)} className="mx-20 px-4 rounded-lg py-2 shadow-lg border-2 bg-[#7BB5CB] border-[#7BB5CB] hover:[#FD721D] hover:text-[#7BB5CB]">
                         <Text className="text-white font-semibold">VER RESEÑAS</Text>
                     </TouchableOpacity>
                 </View>
@@ -638,9 +642,11 @@ export default function DetalleParqueoScreen() {
                 {/* Espacio al final para mejor scroll */}
                 <View className="h-8" />
             </View>
-            <CommentSection visible={modalVisible} onClose={() => setModalVisible(false)}>
-                <ReviewsContent onClose={() => setModalVisible(false)}/>
-            </CommentSection>
         </ScrollView>
+            <ReviewsModal
+      visible={reviewsModalVisible}
+      onClose={() => setReviewsModalVisible(false)}
+    />
+        </View>
     );
 }

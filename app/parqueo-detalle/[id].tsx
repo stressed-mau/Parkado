@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
-
+import CommentSection from '@/src/features/comments/screens/CommentSection';
+import ReviewsContent from '@/src/features/comments/components/Reviews';
 // --- TIPOS DE DATOS COMPLETOS ---
 interface Calificacion { 
     puntuacion: string; 
@@ -367,6 +368,7 @@ export default function DetalleParqueoScreen() {
     const [data, setData] = useState<ParqueoDetalleAPI | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [modalVisible, setModalVisible] = useState(false);
 
     const { averageRating, reviewCount } = useParqueoStats(data);
     const { 
@@ -533,6 +535,10 @@ export default function DetalleParqueoScreen() {
                     <Text className="text-xs text-black ml-2">
                         ({reviewCount} {reviewCount === 1 ? 'opinión' : 'opiniones'})
                     </Text>
+                    {/* MOSTRAR MODAL DE RESENIAS Y CALIFICACIONES */}
+                    <TouchableOpacity onPress={() => setModalVisible(true)} className="mx-20 px-4 rounded-lg py-2 shadow-lg border-2 bg-[#7BB5CB] border-[#7BB5CB] hover:[#FD721D] hover:text-[#7BB5CB]">
+                        <Text className="text-white font-semibold">VER RESEÑAS</Text>
+                    </TouchableOpacity>
                 </View>
 
                 {/* Fila de Acciones */}
@@ -553,6 +559,7 @@ export default function DetalleParqueoScreen() {
                         <Feather name="share-2" size={24} color="#7BB5CB" />
                         <Text className="text-xs mt-1 text-black">Compartir</Text>
                     </TouchableOpacity>
+
                 </View>
 
                 {/* Descripción General */}
@@ -631,6 +638,9 @@ export default function DetalleParqueoScreen() {
                 {/* Espacio al final para mejor scroll */}
                 <View className="h-8" />
             </View>
+            <CommentSection visible={modalVisible} onClose={() => setModalVisible(false)}>
+                <ReviewsContent onClose={() => setModalVisible(false)}/>
+            </CommentSection>
         </ScrollView>
     );
 }

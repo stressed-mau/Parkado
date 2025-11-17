@@ -290,10 +290,8 @@ export default function PagoQrScreen() {
                         </Text>
                     </View>
                 ) : (
-                    <View className="w-full bg-green-50 p-3 rounded-lg border border-green-200 mb-4">
-                        <Text className="text-green-800 text-sm text-center">
-                            ✅ Sesión activa: {userData.email}
-                        </Text>
+                    <View>
+                        
                     </View>
                 )}
 

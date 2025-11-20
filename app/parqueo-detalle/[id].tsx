@@ -643,10 +643,11 @@ export default function DetalleParqueoScreen() {
                 <View className="h-8" />
             </View>
         </ScrollView>
-            <ReviewsModal
-      visible={reviewsModalVisible}
-      onClose={() => setReviewsModalVisible(false)}
-    />
+        <ReviewsModal
+            visible={reviewsModalVisible}
+            onClose={() => setReviewsModalVisible(false)}
+            parqueoId={parseInt(parqueoId || '0')} // Pasar el ID del parqueo
+            />
         </View>
     );
 }

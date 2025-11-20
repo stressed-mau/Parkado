@@ -2,15 +2,27 @@ import axios from "axios";
 
 const BASE_URL = "https://parkado-backend.vercel.app/api";
 
-export const createComment = async (data: {
-    puntuacion:number;
-    comentario:string;
+export const getCalificacionesByParqueo = async (parqueoId: number) => {
+  try {
+    const response = await axios.get(`${BASE_URL}/calificaciones/${parqueoId}`);
+    return response.data;
+  } catch (error: any) {
+    console.error("Error al obtener reseñas:", error.response?.data || error);
+    throw error;
+  }
+};
+
+export const postCalificacion = async (body: {
+  parqueoId: number;
+  usuarioId: number;
+  puntuacion: number;
+  comentario: string;
 }) => {
-    try{
-        const response  = await axios.post(`${BASE_URL}/calificaciones`, data);
-        return response.data;
-    }catch(error:any){
-        console.error("Error al crear el comentario:", error.response?.data || console.error);
-        throw error.response?.data || error;
-    }
-}
+  try {
+    const response = await axios.post(`${BASE_URL}/calificaciones`, body);
+    return response.data;
+  } catch (error: any) {
+    console.log("Error POST calificación:", error.response?.data || error);
+    throw error;
+  }
+};

@@ -1,5 +1,4 @@
-// components/ReviewsModal.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -8,11 +7,17 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { AntDesign, FontAwesome6 } from '@expo/vector-icons';
+import { FontAwesome6 } from '@expo/vector-icons';
+import { getCalificacionesByParqueo, postCalificacion } from "@/api/CommentApi"; // AJUSTA LA RUTA CORRECTA
+import StarRating from './StarRating';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 
 interface Review {
   id: string;
+  userId:number;
   user: string;
   rating: number;
   comment: string;
@@ -22,72 +27,117 @@ interface Review {
 interface ReviewsModalProps {
   visible: boolean;
   onClose: () => void;
+  parqueoId: number;
 }
 
 const ReviewsModal: React.FC<ReviewsModalProps> = ({ 
   visible, 
-  onClose
+  onClose,
+  parqueoId
 }) => {
   const [userRating, setUserRating] = useState(0);
   const [comment, setComment] = useState('');
+  const [allReviews, setAllReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [usuarioId, setUsuarioId] = useState<number | null>(null);
+  const userReview = allReviews.find(r => r.userId === usuarioId);
+  const userAlreadyReviewed = !!userReview;
 
-  // Datos de ejemplo
-  const [allReviews, setAllReviews] = useState<Review[]>([
-    {
-      id: '1',
-      user: 'Giuli uwu',
-      rating: 4,
-      comment: 'Malisimo servicio, una mierda la interfaz .',
-      date: 'recien'
-    },
-  ]);
-
-  // Calcular promedio y cantidad basado en las reseñas de ejemplo
-  const averageRating = 4.3;
-  const reviewCount = allReviews.length;
-
-  const handleAddReview = () => {
-    if (userRating === 0) {
-      Alert.alert('Error', 'Por favor selecciona una calificación');
-      return;
+useEffect(() => {
+  const loadUser = async () => {
+    const stored = await AsyncStorage.getItem("user");
+    if (stored) {
+      const user = JSON.parse(stored);
+      setUsuarioId(user.id);
     }
+  };
+  loadUser();
+}, []);
 
-    const newReview: Review = {
-      id: Date.now().toString(),
-      user: 'Tú',
-      rating: userRating,
-      comment: comment || 'Sin comentario',
-      date: 'hace unos momentos'
-    };
 
-    setAllReviews([newReview, ...allReviews]);
+ useEffect(() => {
+    if (visible && parqueoId) {
+      loadReviews();
+    }
+  }, [visible, parqueoId]);
+
+  const loadReviews = async () => {
+    try {
+      setLoading(true);
+      const data = await getCalificacionesByParqueo(parqueoId);
+      
+      let reviewsArray: any[] = [];
+      
+      if (Array.isArray(data)) {
+        reviewsArray = data;
+      } else if (data && typeof data === 'object') {
+        reviewsArray = [data];
+      } else {
+        reviewsArray = [];
+      }
+      const mappedReviews = reviewsArray.map((item) => ({
+        id: item.id?.toString() || Math.random().toString(),
+        userId: item.usuarioId, 
+        user: `${item.usuario?.nombres || 'Usuario'} ${item.usuario?.apellidos || ''}`.trim(),
+        rating: Number(item.puntuacion) || 0,
+        comment: item.comentario || 'Sin comentario',
+        date: item.fechaCreacion ? 
+          new Date(item.fechaCreacion).toLocaleDateString() : 
+          new Date().toLocaleDateString(),
+      }));
+
+      setAllReviews(mappedReviews);
+    } catch (error) {
+      console.error("Error cargando reseñas:", error);
+      Alert.alert("Error", "No se pudieron cargar las reseñas");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const averageRating = allReviews.length > 0 
+    ? allReviews.reduce((acc, r) => acc + r.rating, 0) / allReviews.length
+    : 0;
+  
+  const reviewCount = allReviews.length;
+  
+  const handleSubmitReview = async () => {
+  if (!userRating) {
+    Alert.alert("Error", "Selecciona una calificación");
+    return;
+  }
+
+  if (!comment.trim()) {
+    Alert.alert("Error", "Escribe un comentario");
+    return;
+  }
+
+  try {
+    setSubmitting(true);
+
+    const usuarioId = parqueoId;
+
+    await postCalificacion({
+      parqueoId,
+      usuarioId,
+      puntuacion: userRating,
+      comentario: comment,
+    });
+
+    Alert.alert("Éxito", "Tu reseña fue publicada");
+
+    await loadReviews();
+    
     setUserRating(0);
-    setComment('');
-    Alert.alert('Éxito', 'Tu reseña ha sido publicada');
-  };
+    setComment("");
 
-  const renderStars = (rating: number, size: number = 16, interactive: boolean = false) => {
-    return (
-      <View className="flex-row">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <TouchableOpacity
-            key={star}
-            disabled={!interactive}
-            onPress={() => interactive && setUserRating(star)}
-            className="mx-0.5"
-          >
-            <AntDesign
-            name="star"
-              size={size}
-              fill={star <= rating ? '#FFD700' : 'transparent'}
-              color={star <= rating ? '#FFD700' : '#D1D5DB'}
-            />
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  };
-
+  } catch (error) {
+    Alert.alert("Error", "No se pudo publicar la reseña");
+  } finally {
+    setSubmitting(false);
+  }
+};
   return (
     <Modal
       animationType="slide"
@@ -96,16 +146,13 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
       onRequestClose={onClose}
     >
       <View className="flex-1 justify-end">
-        {/* Overlay semi-transparente */}
         <TouchableOpacity 
           className="absolute inset-0 bg-black/50"
           onPress={onClose}
           activeOpacity={1}
         />
         
-        {/* Contenido del modal */}
         <View className="bg-white rounded-t-3xl h-4/5 mt-20">
-          {/* Header fijo */}
           <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
             <Text className="text-xl font-bold text-gray-800">Reseñas</Text>
             <TouchableOpacity 
@@ -121,60 +168,93 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 20 }}
           >
-            {/* Resumen de calificación */}
-            <View className="p-4 border-b border-gray-100 bg-gray-50">
-              <View className="items-center mb-4">
-                <Text className="text-4xl font-bold text-gray-800">{averageRating.toFixed(1)}</Text>
-                <Text className="text-gray-600 mb-2">de 5</Text>
-                {renderStars(averageRating, 20)}
-                <Text className="text-gray-500 mt-1">
-                  {reviewCount} {reviewCount === 1 ? 'opinión' : 'opiniones'}
-                </Text>
+            {loading ? (
+              <View className="flex-1 justify-center items-center py-8">
+                <ActivityIndicator size="large" color="#7BB5CB" />
+                <Text className="text-gray-600 mt-4">Cargando reseñas...</Text>
               </View>
-            </View>
-
-            {/* Sección para agregar reseña */}
+            ) : (
+              <>
             <View className="p-4 border-b border-gray-100">
-              <Text className="text-lg font-semibold text-gray-800 mb-4">
-                Agregar tu reseña
-              </Text>
-              
-              {/* Calificación */}
-              <View className="mb-4">
-                <Text className="font-medium text-gray-700 mb-2">Calificación</Text>
-                <View className="flex-row justify-center">
-                  {renderStars(userRating, 28, true)}
-                </View>
-              </View>
 
-              {/* Comentario */}
-              <View className="mb-4">
-                <Text className="font-medium text-gray-700 mb-2">Comentario</Text>
-                <TextInput
-                  className="border border-gray-300 rounded-lg p-4 bg-white min-h-[120px] text-gray-800"
-                  placeholder="Comparte tu experiencia con este estacionamiento..."
-                  placeholderTextColor="#9CA3AF"
-                  multiline
-                  textAlignVertical="top"
-                  value={comment}
-                  onChangeText={setComment}
-                  maxLength={500}
-                />
-                <Text className="text-right text-gray-500 text-sm mt-2">
-                  {comment.length}/500
-                </Text>
-              </View>
+              {userAlreadyReviewed ? (
+                <>
+                  <Text className="text-lg font-semibold text-gray-800 mb-4">
+                    Tu opinión
+                  </Text>
 
-              {/* Botón Publicar */}
-              <TouchableOpacity
-                className="bg-[#7BB5CB] rounded-lg py-4 px-6 active:bg-[#6aa4b9]"
-                onPress={handleAddReview}
-              >
-                <Text className="text-white text-center font-semibold text-base">
-                  Publicar reseña
-                </Text>
-              </TouchableOpacity>
+                  <View className="bg-gray-100 p-4 rounded-xl border border-gray-300">
+                    <View className="flex-row justify-between mb-2">
+                      <Text className="font-semibold text-gray-800">
+                        {userReview?.user}
+                      </Text>
+                      <Text className="text-gray-500 text-sm">
+                        {userReview?.date}
+                      </Text>
+                    </View>
+
+                    <StarRating rating={userReview?.rating || 0} />
+
+                    <Text className="text-gray-700 mt-2">
+                      {userReview?.comment}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  {/* FORMULARIO NORMAL */}
+                  <Text className="text-lg font-semibold text-gray-800 mb-4">
+                    Agregar tu reseña
+                  </Text>
+
+                  <View className="mb-4">
+                    <Text className="font-medium text-gray-700 mb-2">Calificación</Text>
+                    <View className="flex-row justify-center">
+                      <StarRating
+                        rating={userRating}
+                        size={28}
+                        interactive
+                        onRatingChange={setUserRating}
+                      />
+                    </View>
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className="font-medium text-gray-700 mb-2">Comentario</Text>
+                    <TextInput
+                      className="border border-gray-300 rounded-lg p-4 bg-white min-h-[100px] text-gray-800"
+                      placeholder="Comparte tu experiencia con este estacionamiento..."
+                      placeholderTextColor="#9CA3AF"
+                      multiline
+                      textAlignVertical="top"
+                      value={comment}
+                      onChangeText={setComment}
+                      maxLength={500}
+                    />
+                    <Text className="text-right text-gray-500 text-sm mt-2">
+                      {comment.length}/500
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={handleSubmitReview}
+                    disabled={submitting}
+                    className={`rounded-lg py-4 px-6 ${
+                      submitting ? "bg-gray-400" : "bg-[#7BB5CB]"
+                    }`}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator color="white" />
+                    ) : (
+                      <Text className="text-white text-center font-semibold text-base">
+                        Publicar reseña
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
+
 
             {/* Lista de reseñas */}
             <View className="p-4">
@@ -204,7 +284,7 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
                     
                     {/* Estrellas */}
                     <View className="mb-2">
-                      {renderStars(review.rating)}
+                      <StarRating rating={review.rating} />
                     </View>
                     
                     {/* Comentario */}
@@ -215,6 +295,8 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
                 ))
               )}
             </View>
+            </>
+            )}
           </ScrollView>
         </View>
       </View>

@@ -1,9 +1,10 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import axios from "axios";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Alert,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Text,
@@ -13,9 +14,7 @@ import {
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { z } from "zod";
-import Logo from "../assets/Logo";
 
-// === SCHEMA DE VALIDACIÓN ===
 const registerSchema = z.object({
   nombre: z
     .string()
@@ -53,6 +52,15 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  const [touched, setTouched] = useState({
+    nombre: false,
+    apellido: false,
+    correo: false,
+    telefono: false,
+    password: false,
+    confirmPassword: false,
+  });
+
   const [errorNombre, setErrorNombre] = useState("");
   const [errorApellido, setErrorApellido] = useState("");
   const [errorCorreo, setErrorCorreo] = useState("");
@@ -62,8 +70,15 @@ export default function RegisterScreen() {
 
   const [isFormValid, setIsFormValid] = useState(false);
 
-  // ===== VALIDACIONES CON ZOD =====
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  
   useEffect(() => {
+    const hasTouched = Object.values(touched).some(value => value);
+    
+    if (!hasTouched) {
+      return;
+    }
+
     try {
       registerSchema.parse({
         nombre,
@@ -74,7 +89,6 @@ export default function RegisterScreen() {
         confirmPassword,
       });
 
-      // si pasa todas las validaciones
       setErrorNombre("");
       setErrorApellido("");
       setErrorCorreo("");
@@ -86,19 +100,36 @@ export default function RegisterScreen() {
       if (err instanceof z.ZodError) {
         const errors = err.flatten().fieldErrors;
 
-        setErrorNombre(errors.nombre?.[0] || "");
-        setErrorApellido(errors.apellido?.[0] || "");
-        setErrorCorreo(errors.correo?.[0] || "");
-        setErrorTelefono(errors.telefono?.[0] || "");
-        setErrorPassword(errors.password?.[0] || "");
-        setErrorConfirmPassword(errors.confirmPassword?.[0] || "");
+        setErrorNombre(touched.nombre ? (errors.nombre?.[0] || "") : "");
+        setErrorApellido(touched.apellido ? (errors.apellido?.[0] || "") : "");
+        setErrorCorreo(touched.correo ? (errors.correo?.[0] || "") : "");
+        setErrorTelefono(touched.telefono ? (errors.telefono?.[0] || "") : "");
+        setErrorPassword(touched.password ? (errors.password?.[0] || "") : "");
+        setErrorConfirmPassword(touched.confirmPassword ? (errors.confirmPassword?.[0] || "") : "");
       }
       setIsFormValid(false);
     }
-  }, [nombre, apellido, correo, telefono, password, confirmPassword]);
+  }, [nombre, apellido, correo, telefono, password, confirmPassword, touched]);
 
-  // ===== REGISTRO =====
+  const handleBlur = (field: keyof typeof touched) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+
   const handleRegister = async () => {
+    setTouched({
+      nombre: true,
+      apellido: true,
+      correo: true,
+      telefono: true,
+      password: true,
+      confirmPassword: true,
+    });
+
+    if (!isFormValid) {
+      Alert.alert("Error", "Por favor, complete todos los campos correctamente");
+      return;
+    }
+
     try {
       const response = await axios.post(
         "https://parkado-backend.vercel.app/api/auth/register",
@@ -113,7 +144,7 @@ export default function RegisterScreen() {
       );
 
       Alert.alert(
-        "✅ Registro exitoso",
+        "Registro exitoso",
         response.data.message || "Usuario creado correctamente"
       );
 
@@ -123,6 +154,14 @@ export default function RegisterScreen() {
       setTelefono("");
       setPassword("");
       setConfirmPassword("");
+      setTouched({
+        nombre: false,
+        apellido: false,
+        correo: false,
+        telefono: false,
+        password: false,
+        confirmPassword: false,
+      });
 
       setTimeout(() => {
         router.push("/Login");
@@ -136,7 +175,6 @@ export default function RegisterScreen() {
     }
   };
 
-  // === UI SIN CAMBIOS ===
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-[#F6EEE4]"
@@ -149,25 +187,34 @@ export default function RegisterScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View className="items-center mb-6">
-          <Logo />
+        <View className="items-center">
+          <Animated.Image 
+            source={require("../assets/images/logo.png")}
+            style={{
+              width: 220,
+              height: 150,
+              resizeMode: "contain",
+              transform: [{ scale: pulseAnim }],
+            }}
+          />
         </View>
 
         <Text className="text-2xl font-bold text-center text-gray-800">
-          REGISTRO DE USUARIO
+          Registro de Usuario
         </Text>
 
         <View className="mt-8 space-y-4">
-          {/* === NOMBRE === */}
           <View>
-            <Text className="text-xs font-bold text-[#B2A83F] mb-1">
-              NOMBRE(S)
+            <Text className="block text-sm font-medium text-black mb-1">
+              Nombre(s)
             </Text>
             <TextInput
               placeholder="Ingrese sus nombres"
-              className="border border-gray-300 rounded-lg p-3 bg-white"
+              placeholderTextColor="#7BB3CD"
+              className="p-3 border border-[#F0E2D1] rounded-lg bg-white text-black focus:border-[#FD721D] focus:border-2"
               value={nombre}
               onChangeText={setNombre}
+              onBlur={() => handleBlur('nombre')}
               maxLength={16}
             />
             {errorNombre ? (
@@ -175,16 +222,17 @@ export default function RegisterScreen() {
             ) : null}
           </View>
 
-          {/* === APELLIDO === */}
           <View>
-            <Text className="text-xs font-bold text-[#B2A83F] mb-1">
-              APELLIDO(S)
+            <Text className="block text-sm font-medium text-black mb-1">
+              Apellido(s)
             </Text>
             <TextInput
               placeholder="Ingrese sus apellidos"
-              className="border border-gray-300 rounded-lg p-3 bg-white"
+              placeholderTextColor="#7BB3CD"
+              className="p-3 border border-[#F0E2D1] rounded-lg bg-white text-black focus:border-[#FD721D] focus:border-2"
               value={apellido}
               onChangeText={setApellido}
+              onBlur={() => handleBlur('apellido')}
               maxLength={16}
             />
             {errorApellido ? (
@@ -192,34 +240,36 @@ export default function RegisterScreen() {
             ) : null}
           </View>
 
-          {/* === CORREO === */}
           <View>
-            <Text className="text-xs font-bold text-[#B2A83F] mb-1">
-              CORREO ELECTRÓNICO
+            <Text className="block text-sm font-medium text-black mb-1">
+              Correo Electrónico
             </Text>
             <TextInput
               placeholder="ejemplo@correo.com"
+              placeholderTextColor="#7BB3CD"
               keyboardType="email-address"
-              className="border border-gray-300 rounded-lg p-3 bg-white"
+              className="p-3 border border-[#F0E2D1] rounded-lg bg-white text-black focus:border-[#FD721D] focus:border-2"
               value={correo}
               onChangeText={setCorreo}
+              onBlur={() => handleBlur('correo')}
             />
             {errorCorreo ? (
               <Text className="text-red-500 text-xs mt-1">{errorCorreo}</Text>
             ) : null}
           </View>
 
-          {/* === TELÉFONO === */}
           <View>
-            <Text className="text-xs font-bold text-[#B2A83F] mb-1">
-              TELÉFONO
+            <Text className="block text-sm font-medium text-black mb-1">
+              Teléfono
             </Text>
             <TextInput
               placeholder="Ej: 71234567"
+              placeholderTextColor="#7BB3CD"
               keyboardType="numeric"
-              className="border border-gray-300 rounded-lg p-3 bg-white"
+              className="p-3 border border-[#F0E2D1] rounded-lg bg-white text-black focus:border-[#FD721D] focus:border-2"
               value={telefono}
               onChangeText={(t) => setTelefono(t.replace(/[^0-9]/g, ""))}
+              onBlur={() => handleBlur('telefono')}
               maxLength={8}
             />
             {errorTelefono ? (
@@ -227,24 +277,28 @@ export default function RegisterScreen() {
             ) : null}
           </View>
 
-          {/* === CONTRASEÑA === */}
           <View>
-            <Text className="text-xs font-bold text-[#B2A83F] mb-1">
-              CONTRASEÑA
+            <Text className="block text-sm font-medium text-black mb-1">
+              Contraseña
             </Text>
-            <View className="flex-row items-center border border-gray-300 rounded-lg bg-white px-3">
+            <View className="flex-row items-center">
               <TextInput
-                placeholder="Ingrese su contraseña"
+                placeholder="••••••••••••"
+                placeholderTextColor="#7BB3CD"
                 secureTextEntry={!showPassword}
-                className="flex-1 p-3"
+                className="flex-1 bg-white p-3 rounded-lg border border-[#F0E2D1] focus:border-[#FD721D] focus:border-2"
                 value={password}
                 onChangeText={setPassword}
+                onBlur={() => handleBlur('password')}
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              <TouchableOpacity 
+                className="flex right-3 inset-y absolute items-center"
+                onPress={() => setShowPassword(!showPassword)}
+              >
                 <Ionicons
                   name={showPassword ? "eye-off" : "eye"}
                   size={22}
-                  color="gray"
+                  color="#B2A83F"
                 />
               </TouchableOpacity>
             </View>
@@ -253,26 +307,28 @@ export default function RegisterScreen() {
             ) : null}
           </View>
 
-          {/* === CONFIRMAR CONTRASEÑA === */}
           <View>
-            <Text className="text-xs font-bold text-[#B2A83F] mb-1">
-              CONFIRMAR CONTRASEÑA
+            <Text className="block text-sm font-medium text-black mb-1">
+              Confirmar Contraseña
             </Text>
-            <View className="flex-row items-center border border-gray-300 rounded-lg bg-white px-3">
+            <View className="flex-row items-center">
               <TextInput
-                placeholder="Repita su contraseña"
+                placeholder="••••••••••••"
+                placeholderTextColor="#7BB3CD"
                 secureTextEntry={!showConfirmPassword}
-                className="flex-1 p-3"
+                className="flex-1 bg-white p-3 rounded-lg border border-[#F0E2D1] focus:border-[#FD721D] focus:border-2"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
+                onBlur={() => handleBlur('confirmPassword')}
               />
               <TouchableOpacity
+                className="flex right-3 inset-y absolute items-center"
                 onPress={() => setShowConfirmPassword(!showConfirmPassword)}
               >
                 <Ionicons
                   name={showConfirmPassword ? "eye-off" : "eye"}
                   size={22}
-                  color="gray"
+                  color="#B2A83F"
                 />
               </TouchableOpacity>
             </View>
@@ -284,10 +340,9 @@ export default function RegisterScreen() {
           </View>
         </View>
 
-        {/* === BOTÓN REGISTRAR === */}
         <TouchableOpacity
-          className={`py-3 mt-8 rounded-lg ${
-            isFormValid ? "bg-black" : "bg-gray-400"
+          className={`py-3 mt-6 rounded-lg ${
+            isFormValid ? "bg-[#FD721D]" : "bg-[#FEB182]"
           }`}
           disabled={!isFormValid}
           onPress={handleRegister}
@@ -296,6 +351,17 @@ export default function RegisterScreen() {
             REGISTRAR
           </Text>
         </TouchableOpacity>
+
+        <View  className="mt-6 flex-row justify-center">
+          <Text className="text-center text-[#7BB3CD] font-semibold">
+            ¿Ya tienes cuenta?
+          </Text>
+        <TouchableOpacity
+          onPress={() => router.push("/Login")}
+        >
+            <Text className="text-[#FD721D] font-semibold"> Inicia sesión aquí</Text>
+        </TouchableOpacity>
+        </View>
       </KeyboardAwareScrollView>
     </KeyboardAvoidingView>
   );

@@ -1,18 +1,39 @@
 import { Tabs } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useState } from "react"; 
+import { useState, useEffect } from "react"; 
 import SplashScreen from "@/components/ui/SplashScreen";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [showSplash, setShowSplash] = useState(true);
-  if (showSplash) { 
-    return <SplashScreen onFinish={() => 
-      setShowSplash(false)} 
-      />; 
-    }
+  const [loaded, setLoaded] = useState(false);
 
+  useEffect(() => {
+    const checkSplash = async () => {
+      const alreadyShown = await AsyncStorage.getItem("splashShown");
+
+      if (alreadyShown) {
+        setShowSplash(false);
+      }
+
+      setLoaded(true);
+    };
+
+    checkSplash();
+  }, []);
+
+  const handleFinish = async () => {
+    await AsyncStorage.setItem("splashShown", "true");
+    setShowSplash(false);
+  };
+
+  if (!loaded) return null;
+
+  if (showSplash) {
+    return <SplashScreen onFinish={handleFinish} />;
+  }
   return (
     <Tabs
       screenOptions={{

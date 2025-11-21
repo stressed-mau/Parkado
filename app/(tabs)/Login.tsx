@@ -2,9 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
     Alert,
+    Animated,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -13,7 +14,6 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import Logo from "../../assets/Logo";
 
 // ✅ FUNCIÓN PARA DECODIFICAR JWT
 const decodeJWT = (token: string) => {
@@ -41,6 +41,7 @@ export default function LoginUsuario() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const handleLogin = async () => {
     if (!correo || !password) {
@@ -130,26 +131,36 @@ export default function LoginUsuario() {
       >
         {/* LOGO */}
         <View className="items-center mb-6">
-          <Logo />
+                <Animated.Image 
+                source={require("../../assets/images/logo.png")}
+                style={{
+                    width: 220,
+                    height: 220,
+                    resizeMode: "contain",
+                    marginBottom: 5,
+                    transform: [{ scale: pulseAnim }],
+                  }}
+                />
         </View>
 
-        <Text className="text-2xl font-bold text-center text-gray-800 mb-2">
-          INICIAR SESIÓN
+        <Text className="text-5xl font-bold text-center mb-1">
+          Bienvenido
         </Text>
-        <Text className="text-center text-gray-500 mb-6">
-          Accede a tu cuenta de Parkado
+        <Text className="text-[#7BB3CD] text-lg text-center mb-8">
+          Inicia sesión en tu cuenta
         </Text>
 
         <View className="space-y-5">
           {/* CORREO */}
           <View>
-            <Text className="text-xs font-bold text-[#B2A83F] mb-1">
-              CORREO ELECTRÓNICO
+            <Text className="block text-base font-medium text-black mb-2">
+              Correo Electrónico
             </Text>
             <TextInput
               placeholder="ejemplo@correo.com"
+              placeholderTextColor="#7BB3CD"
               keyboardType="email-address"
-              className="border border-gray-300 rounded-lg p-3 bg-white"
+              className="w-full px-4 py-3 border border-[#F0E2D1] rounded-lg bg-white text-black focus:border-[#FD721D] focus:border-2"
               value={correo}
               onChangeText={setCorreo}
               autoCapitalize="none"
@@ -158,18 +169,21 @@ export default function LoginUsuario() {
 
           {/* CONTRASEÑA */}
           <View>
-            <Text className="text-xs font-bold text-[#B2A83F] mb-1">
-              CONTRASEÑA
+            <Text className="block text-base font-medium text-black mb-2">
+              Contraseña
             </Text>
-            <View className="flex-row items-center border border-gray-300 rounded-lg bg-white pr-3">
+            <View className="flex-row items-center">
               <TextInput
-                placeholder="Ingrese su contraseña"
+                placeholder="••••••••••••"
+                placeholderTextColor="#7BB3CD"
                 secureTextEntry={!showPassword}
-                className="flex-1 p-3"
+                className= "flex-1 bg-white p-3 rounded-lg border border-[#F0E2D1] focus:border-[#FD721D] focus:border-2"
                 value={password}
                 onChangeText={setPassword}
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              <TouchableOpacity 
+              className="flex right-3 inset-y absolute items-center"
+              onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons
                   name={showPassword ? "eye-off" : "eye"}
                   size={22}
@@ -183,7 +197,7 @@ export default function LoginUsuario() {
         {/* BOTÓN LOGIN */}
         <TouchableOpacity
           className={`py-3 mt-10 rounded-lg shadow-md ${
-            isLoading ? "bg-gray-400" : "bg-black"
+            isLoading ? "bg-[#FEB182]" : "bg-[#FD721D]"
           }`}
           disabled={isLoading}
           onPress={handleLogin}
@@ -194,14 +208,16 @@ export default function LoginUsuario() {
         </TouchableOpacity>
 
         {/* LINK A REGISTRO */}
+        <View  className="mt-6 flex-row justify-center">
+                    <Text className="text-center text-[#7BB3CD] font-semibold">
+            ¿No tienes una cuenta?
+          </Text>
         <TouchableOpacity
           onPress={() => router.push("/RegistroUsuario")}
-          className="mt-6"
         >
-          <Text className="text-center text-[#B2A83F] font-semibold">
-            ¿No tienes una cuenta? Regístrate
-          </Text>
+            <Text className="text-[#FD721D] font-semibold"> Regístrate aquí</Text>
         </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -1,3 +1,6 @@
+// useReserva.ts
+// API doc (subida por el usuario): /mnt/data/apin reserva.pdf
+
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -69,12 +72,12 @@ export default function useReserva(): UseReservaReturn {
     const cargarPlazasDisponibles = useCallback(async () => {
         try {
             console.log('🔄 Cargando plazas disponibles para parqueo ID:', parqueoId);
-            
+
             const url = `https://parkado-backend.vercel.app/api/parqueos/details`;
             console.log('📡 URL de la API:', url);
-            
+
             const response = await fetch(url);
-            
+
             if (!response.ok) {
                 throw new Error(`Error ${response.status} al cargar datos`);
             }
@@ -100,12 +103,11 @@ export default function useReserva(): UseReservaReturn {
             let tarifaMoto = 0;
 
             if (parqueoEncontrado.tarifas && parqueoEncontrado.tarifas.length > 0) {
-                // ✅ CORREGIDO: Buscar solo por tipoVehiculoId
                 const tarifaAutoObj = parqueoEncontrado.tarifas.find(t => t.tipoVehiculoId === 1);
                 const tarifaMotoObj = parqueoEncontrado.tarifas.find(t => t.tipoVehiculoId === 2);
 
-                tarifaAuto = tarifaAutoObj ? parseFloat(tarifaAutoObj.precioHora) : 0;
-                tarifaMoto = tarifaMotoObj ? parseFloat(tarifaMotoObj.precioHora) : 0;
+                tarifaAuto = tarifaAutoObj ? parseFloat(String(tarifaAutoObj.precioHora)) : 0;
+                tarifaMoto = tarifaMotoObj ? parseFloat(String(tarifaMotoObj.precioHora)) : 0;
 
                 console.log('💰 Tarifas extraídas:', {
                     auto: tarifaAuto,
@@ -150,7 +152,7 @@ export default function useReserva(): UseReservaReturn {
 
         } catch (error: any) {
             console.error('❌ Error cargando datos del parqueo:', error);
-            Alert.alert('Error', 'No se pudieron cargar los datos del parqueo: ' + error.message);
+            Alert.alert('Error', 'No se pudieron cargar los datos del parqueo: ' + (error?.message || error));
             
             setTarifasReales({ auto: 8.5, moto: 4.0 });
             setPlazasReales([]);
@@ -182,7 +184,7 @@ export default function useReserva(): UseReservaReturn {
                 fechaHoraIni: reservaData.fechaInicioISO,
                 fechaHoraFin: reservaData.fechaFinISO,
                 plazaId: parseInt(reservaData.plazaId),
-                usuarioId: parseInt(userData.id),
+                usuarioId: parseInt(String(userData.id)),
                 matriculaVehiculo: reservaData.matricula
             };
 
@@ -192,21 +194,24 @@ export default function useReserva(): UseReservaReturn {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userData.token}`
+                    // según tu PDF la API de reservas usa usuarioId en body y no requiere Authorization
+                    // si tu backend cambia y requiere token, descomenta la siguiente línea:
+                    // 'Authorization': `Bearer ${userData.token}`
                 },
                 body: JSON.stringify(reservaPayload)
             });
 
-            const responseData = await response.json();
+            const responseData = await response.json().catch(() => null);
 
             if (!response.ok) {
                 if (response.status === 409) {
                     throw new Error('Conflicto de Horario: La plaza ya está reservada en ese rango.');
                 }
-                throw new Error(responseData.message || `Error ${response.status} al crear la reserva`);
+                throw new Error(responseData?.message || `Error ${response.status} al crear la reserva`);
             }
 
             console.log('✅ Reserva creada exitosamente:', responseData);
+            // Aseguramos retornar el body creado (idealmente con id)
             return responseData;
 
         } catch (error: any) {
@@ -215,7 +220,7 @@ export default function useReserva(): UseReservaReturn {
         }
     };
 
-    // Función para actualizar estado de plaza
+    // Función para actualizar estado de plaza (robusta, con reintentos)
     const actualizarEstadoPlaza = async (plazaId: number) => {
         try {
             if (!userData) {
@@ -223,32 +228,50 @@ export default function useReserva(): UseReservaReturn {
             }
 
             const updatePayload = {
-                userId: 2,
+                userId: Number(userData.id),
                 estado: "OCUPADO"
             };
 
-            console.log('🔄 Actualizando estado de plaza:', { plazaId, updatePayload });
+            console.log('🔄 Actualizando estado de plaza (intentando):', { plazaId, updatePayload });
 
-            const response = await fetch(`https://parkado-backend.vercel.app/api/plazas/${plazaId}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userData.token}`
-                },
-                body: JSON.stringify(updatePayload)
-            });
+            const maxAttempts = 3;
+            let attempt = 0;
+            let lastErr: any = null;
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || `Error ${response.status} al actualizar plaza`);
+            while (attempt < maxAttempts) {
+                attempt++;
+                try {
+                    const response = await fetch(`https://parkado-backend.vercel.app/api/plazas/${plazaId}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${userData.token}`
+                        },
+                        body: JSON.stringify(updatePayload)
+                    });
+
+                    if (!response.ok) {
+                        // Intentamos parsear mensaje servidor si existe
+                        const errorData = await response.json().catch(() => null);
+                        const msg = errorData?.message || `Error ${response.status} al actualizar plaza`;
+                        throw new Error(msg);
+                    }
+
+                    const responseData = await response.json().catch(() => null);
+                    console.log('✅ Estado de plaza actualizado exitosamente:', responseData);
+                    return responseData;
+                } catch (err) {
+                    lastErr = err;
+                    console.warn(`Attempt ${attempt} fallo actualizando plaza:`, err);
+                    // backoff simple
+                    await new Promise(r => setTimeout(r, 300 * attempt));
+                }
             }
 
-            const responseData = await response.json();
-            console.log('✅ Estado de plaza actualizado exitosamente:', responseData);
-            return responseData;
-
+            // Si llegamos acá, todos los intentos fallaron
+            throw lastErr || new Error('Error desconocido actualizando plaza');
         } catch (error: any) {
-            console.error('❌ Error actualizando estado de plaza:', error);
+            console.error('❌ Error actualizando estado de plaza (final):', error);
             throw error;
         }
     };
@@ -287,7 +310,7 @@ export default function useReserva(): UseReservaReturn {
         setPlazaSeleccionadaId(null); 
     }, [tipoVehiculo]);
 
-    // Handler principal para confirmar reserva
+    // Handler principal para confirmar reserva (con rollback si falla actualizar plaza)
     const handleConfirmarReserva = async () => {
         if (!plazaSeleccionadaId) { 
             Alert.alert("Requerido", "Selecciona una plaza."); 
@@ -364,41 +387,128 @@ export default function useReserva(): UseReservaReturn {
             setIsCreatingReserva(true);
 
             if (metodoPago === 'Efectivo') {
-                const reservaCreada = await crearReservaEnAPI(reservaData);
-                
-                const plazaIdReal = parseInt(plazaSeleccionadaId);
-                await actualizarEstadoPlaza(plazaIdReal);
-                
-                setPlazasReales(prev => 
-                    prev.map(plaza => 
-                        plaza.id === plazaSeleccionadaId 
-                            ? { ...plaza, estado: 'ocupado' as const }
-                            : plaza
-                    )
-                );
+                // 1) crear reserva
+                let reservaCreada: any = null;
+                try {
+                    reservaCreada = await crearReservaEnAPI(reservaData);
+                    console.log('Reserva creada (temporal):', reservaCreada);
+                } catch (err) {
+                    console.error('Error creando reserva:', err);
+                    throw err;
+                }
 
-                setTimeout(() => {
-                    cargarPlazasDisponibles();
-                }, 1000);
-                
-                Alert.alert(
-                    "✅ Reserva Confirmada", 
-                    `Detalles:\n• Parqueo: ${reservaData.parqueoNombre}\n• Plaza: ${reservaData.nroPlazaReal}\n• Vehículo: ${tipoVehiculo}\n• Matrícula: ${matriculaLimpia}\n• Horario: ${fechaInicio.toLocaleString()} - ${fechaFin.toLocaleString()}\n• Costo: ${costoTotal.toFixed(2)} Bs\n• Método: ${metodoPago}\n• ID Reserva: ${reservaCreada.id}`,
-                    [{ 
-                        text: "Ver Ruta", 
-                        onPress: () => {
-                            router.push({
-                                pathname: '/(tabs)/Mapa' as any,
-                                params: {
-                                    destLat: reservaData.parqueoLat,
-                                    destLng: reservaData.parqueoLng,
-                                    destNombre: reservaData.parqueoNombre,
-                                    reservaId: reservaCreada.id?.toString() || 'N/A'
+                // Si la respuesta del POST ya trae la plaza y su estado es OCUPADO,
+                // no necesitamos hacer el PATCH para ocupar la plaza.
+                const plazaYaOcupada = reservaCreada?.plaza?.estado === 'OCUPADO';
+
+                // 2) Si no viene ocupada, intentar actualizar la plaza (con rollback si falla)
+                if (!plazaYaOcupada) {
+                    const plazaIdReal = parseInt(plazaSeleccionadaId);
+                    try {
+                        await actualizarEstadoPlaza(plazaIdReal);
+
+                        // 3) si todo OK, actualizar UI local y recargar plazas
+                        setPlazasReales(prev => 
+                            prev.map(plaza => 
+                                plaza.id === plazaSeleccionadaId 
+                                    ? { ...plaza, estado: 'ocupado' as const }
+                                    : plaza
+                            )
+                        );
+
+                        setTimeout(() => {
+                            cargarPlazasDisponibles();
+                        }, 1000);
+
+                        Alert.alert(
+                            "✅ Reserva Confirmada", 
+                            `Detalles:\n• Parqueo: ${reservaData.parqueoNombre}\n• Plaza: ${reservaData.nroPlazaReal}\n• Vehículo: ${tipoVehiculo}\n• Matrícula: ${matriculaLimpia}\n• Horario: ${fechaInicio.toLocaleString()} - ${fechaFin.toLocaleString()}\n• Costo: ${costoTotal.toFixed(2)} Bs\n• Método: ${metodoPago}\n• ID Reserva: ${reservaCreada.id || 'N/A'}`,
+                            [{ 
+                                text: "Ver Ruta", 
+                                onPress: () => {
+                                    router.push({
+                                        pathname: '/(tabs)/Mapa' as any,
+                                        params: {
+                                            destLat: reservaData.parqueoLat,
+                                            destLng: reservaData.parqueoLng,
+                                            destNombre: reservaData.parqueoNombre,
+                                            reservaId: reservaCreada.id?.toString() || 'N/A'
+                                        }
+                                    });
                                 }
-                            });
+                            }] 
+                        );
+                    } catch (errorUpdatingPlaza: any) {
+                        console.error('Error actualizando plaza tras crear reserva -> intentando rollback', errorUpdatingPlaza);
+
+                        // Intentar borrar la reserva creada para no dejar inconsistencias
+                        if (reservaCreada?.id) {
+                            try {
+                                const delResp = await fetch(`https://parkado-backend.vercel.app/api/reservas/${reservaCreada.id}`, {
+                                    method: 'DELETE',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${userData?.token}`
+                                    },
+                                    // algunos endpoints DELETE no esperan body; si tu API lo requiere ajusta
+                                    body: JSON.stringify({ usuarioId: Number(userData?.id) })
+                                });
+
+                                if (delResp.ok) {
+                                    console.log('Reserva borrada (rollback) correctamente, id=', reservaCreada.id);
+                                    Alert.alert('Error', 'La reserva no pudo finalizarse completamente y fue cancelada automáticamente. Intenta nuevamente.');
+                                } else {
+                                    const errDel = await delResp.json().catch(() => null);
+                                    console.warn('No se pudo borrar reserva en rollback:', errDel);
+                                    Alert.alert('Error crítico', `La reserva fue creada (ID: ${reservaCreada.id}) pero no se pudo ocupar la plaza. Contacta soporte con el ID de reserva.`);
+                                }
+                            } catch (delErr) {
+                                console.error('Fallo al borrar reserva en rollback:', delErr);
+                                Alert.alert('Error crítico', `Reserva creada (ID: ${reservaCreada.id}) pero no se pudo ocupar la plaza. Contacta soporte con el ID de reserva.`);
+                            }
+                        } else {
+                            Alert.alert('Error', 'La reserva no pudo completarse y no se pudo revertir automáticamente. Intenta de nuevo más tarde.');
                         }
-                    }] 
-                );
+
+                        // finalmente lanzamos el error para que el catch global muestre el mensaje apropiado
+                        throw new Error(errorUpdatingPlaza?.message || 'No se pudo actualizar la plaza luego de crear la reserva.');
+                    }
+                } else {
+                    // Si ya viene ocupada desde la respuesta del POST: aceptamos como OK
+                    console.log('La plaza ya viene marcada como OCUPADO en la respuesta del POST, no hace falta PATCH.');
+
+                    setPlazasReales(prev => 
+                        prev.map(plaza => 
+                            plaza.id === plazaSeleccionadaId 
+                                ? { ...plaza, estado: 'ocupado' as const }
+                                : plaza
+                        )
+                    );
+
+                    setTimeout(() => {
+                        cargarPlazasDisponibles();
+                    }, 1000);
+
+                    Alert.alert(
+                        "✅ Reserva Confirmada", 
+                        `Detalles:\n• Parqueo: ${reservaData.parqueoNombre}\n• Plaza: ${reservaData.nroPlazaReal}\n• Vehículo: ${tipoVehiculo}\n• Matrícula: ${matriculaLimpia}\n• Horario: ${fechaInicio.toLocaleString()} - ${fechaFin.toLocaleString()}\n• Costo: ${costoTotal.toFixed(2)} Bs\n• Método: ${metodoPago}\n• ID Reserva: ${reservaCreada.id || 'N/A'}`,
+                        [{ 
+                            text: "Ver Ruta", 
+                            onPress: () => {
+                                router.push({
+                                    pathname: '/(tabs)/Mapa' as any,
+                                    params: {
+                                        destLat: reservaData.parqueoLat,
+                                        destLng: reservaData.parqueoLng,
+                                        destNombre: reservaData.parqueoNombre,
+                                        reservaId: reservaCreada.id?.toString() || 'N/A'
+                                    }
+                                });
+                            }
+                        }] 
+                    );
+                }
+
             } else if (metodoPago === 'QR') {
                 console.log('🔄 Navegando a PagoQR con datos:', reservaData);
                 router.push({ 
@@ -414,6 +524,7 @@ export default function useReserva(): UseReservaReturn {
             }
 
         } catch (error: any) {
+            console.error('💥 Error en handleConfirmarReserva:', error);
             Alert.alert("❌ Error", error.message || "No se pudo crear la reserva");
         } finally {
             setIsCreatingReserva(false);

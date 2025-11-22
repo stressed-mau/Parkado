@@ -16,17 +16,14 @@ import {
   TouchableOpacity,
   View,
   Platform,
+  DeviceEventEmitter,
 } from "react-native";
 import MapView, { MapPressEvent, Marker } from "react-native-maps";
 import { Button, Checkbox } from "react-native-paper";
 import Logo from "../../assets/Logo";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/**
- * RUTAS LOCALES A LOS PDF SUBIDOS (referencia)
- */
-const DOC_PATH_1 = "/mnt/data/Apis PArkado.pdf";
-const DOC_PATH_2 = "/mnt/data/MODIFICACION DE APIS mas servisios.pdf";
+
 
 export default function RegistroEstacionamiento() {
   const insets = useSafeAreaInsets();
@@ -131,7 +128,6 @@ export default function RegistroEstacionamiento() {
 
   // Horarios picker
   const handleTimeChange = (event: any, selectedDate?: Date) => {
-    // En Android suele recibir event; en iOS selectedDate puede ser undefined si cancela
     setShowPicker(false);
 
     if (selectedDate && pickerInfo) {
@@ -293,6 +289,14 @@ export default function RegistroEstacionamiento() {
       if (response.ok) {
         Alert.alert("✅ Éxito", "Parqueo registrado correctamente.");
         setPagina(1);
+
+        // ----> EMITIR EVENTO PARA QUE useMapa RECARGUE LOS PARQUEOS
+        try {
+          DeviceEventEmitter.emit("parqueoCreated");
+        } catch (e) {
+          console.warn("Error emitiendo evento parqueoCreated", e);
+        }
+
       } else {
         console.error("Respuesta error del servidor:", data);
         Alert.alert("❌ Error", data.message || "No se pudo registrar el parqueo.");
@@ -311,7 +315,6 @@ export default function RegistroEstacionamiento() {
     <ScrollView
       className="flex-1 px-5 py-4"
       style={{ backgroundColor: "#F6EEE4" }}
-      // padding pequeño para que el botón no quede cortado por el bottom-tab
       contentContainerStyle={{ paddingBottom: insets.bottom + 6 }}
       keyboardShouldPersistTaps="handled"
     >

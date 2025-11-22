@@ -1,24 +1,26 @@
-// useMapa.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Alert } from 'react-native';
+import { Alert, DeviceEventEmitter } from 'react-native';
 import { Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import { Coords, ParqueoParaVista } from '../types/mapa';
-import { API_URL, WEBSOCKET_URL, INITIAL_DELTA, COCHABAMBA_REGION } from '../constants/mapa';
+import { API_URL, INITIAL_DELTA, COCHABAMBA_REGION } from '../constants/mapa';
 
 /**
- * Hook useMapa (versión corregida)
- * - transformaciones actualizadas a la nueva API
- * - manejo de WebSocket robusto y seguro
+ * Hook useMapa (completo y corregido)
+ * - Agrega listener para evento 'parqueoCreated'
+ * - Fallback por AsyncStorage para recargar cuando la pantalla gana foco
+ * - transformaciones defensivas a la nueva API
+ * - **Sin WebSocket**: ahora sólo se obtiene la lista desde API_URL
  */
 
 export const useMapa = () => {
   const params = useLocalSearchParams<{ destLat?: string; destLng?: string; destNombre?: string }>();
   const router = useRouter();
   const mapRef = useRef<any>(null);
-  const ws = useRef<WebSocket | null>(null);
 
   // Estados
   const [region, setRegion] = useState<Region | null>(COCHABAMBA_REGION);
@@ -34,7 +36,6 @@ export const useMapa = () => {
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
   const [showDirections, setShowDirections] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
-  const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
 
   // -------------------------
   // transformarParqueo: adaptado a la nueva estructura del backend
@@ -42,40 +43,41 @@ export const useMapa = () => {
   const transformarParqueo = (p: any): ParqueoParaVista | null => {
     if (!p || typeof p !== 'object') return null;
 
-    // latitud/longitud puede venir como number o string
-    const lat = Number(p.latitud);
-    const lon = Number(p.longitud);
+    // Soportar distintas formas de naming
+    const lat = Number(p.latitud ?? p.latitude ?? p.lat ?? null);
+    const lon = Number(p.longitud ?? p.longitude ?? p.lng ?? null);
 
     if (Number.isNaN(lat) || Number.isNaN(lon)) {
-      // no tenemos coordenadas válidas
       return null;
     }
 
-    // rating (si existen calificaciones)
     const califs = Array.isArray(p.calificaciones) ? p.calificaciones : [];
     const rAvg =
       califs.length > 0
         ? califs.reduce((s: number, c: any) => s + (Number(c.puntuacion || 0) || 0), 0) / califs.length
         : 0;
 
-    // disponibilidad: si capacidades tiene cantidad > 0 para algún tipo
     const capacidades = Array.isArray(p.capacidades) ? p.capacidades : [];
     const disp = capacidades.some((c: any) => Number(c?.cantidad || 0) > 0);
 
+    // Si no hay ID, generamos un fallback único basado en coordenadas
+    const id = p.id ?? `${lat.toFixed(6)}_${lon.toFixed(6)}`;
+
     return {
-      // si backend no provee id, lo guardamos como null—luego manejamos este caso en el handler
-      id: p.id ?? null,
+      id,
       nombre: p.nombre || '?',
       direccion: p.direccion || 'Dirección no disponible',
       tipoLugar: p.tipoLugar || 'Estacionamiento',
       propietarioId: p.propietarioId ?? 0,
       latitud: lat,
       longitud: lon,
+      latitude: lat, // duplicados para compatibilidad
+      longitude: lon,
       horarios: Array.isArray(p.horarios) ? p.horarios : [],
       calificaciones: califs,
       capacidades: capacidades,
-      servicios: Array.isArray(p.serviciosAsociados) ? p.serviciosAsociados : (p.servicios || []), // ahora viene como array de IDs
-      plazas: Array.isArray(p.plazas) ? p.plazas : [], // ya no se usa, pero lo mantenemos por compatibilidad
+      servicios: Array.isArray(p.serviciosAsociados) ? p.serviciosAsociados : (p.servicios || []),
+      plazas: Array.isArray(p.plazas) ? p.plazas : [],
       tarifas: Array.isArray(p.tarifas) ? p.tarifas : [],
       fotos: Array.isArray(p.fotos) ? p.fotos : [],
       rating: Number(rAvg.toFixed(1)),
@@ -84,144 +86,129 @@ export const useMapa = () => {
   };
 
   // -------------------------
-  // WebSocket: conexión con reconexión y handler flexible
+  // fetchParqueos / reloadParqueos: obtiene lista desde API y transforma
+  // -------------------------
+  const fetchParqueos = useCallback(async () => {
+    console.log('fetchParqueos: start');
+    setIsLoadingApi(true);
+    try {
+      const response = await axios.get(API_URL);
+      const remote = response?.data;
+
+      if (!Array.isArray(remote)) {
+        console.warn('Respuesta API parqueos no es array:', remote);
+        setParqueos([]);
+        return [];
+      }
+
+      const datosTransformados = remote
+        .map(transformarParqueo)
+        .filter((p: ParqueoParaVista | null): p is ParqueoParaVista => p !== null);
+
+      setParqueos(datosTransformados);
+      console.log('fetchParqueos: end, count=', datosTransformados.length);
+      return datosTransformados;
+    } catch (e: any) {
+      console.error('Error cargando parqueos:', e);
+      setErrorMsg('Error cargando parqueos. Revisa tu conexión.');
+      return [];
+    } finally {
+      setIsLoadingApi(false);
+    }
+  }, []);
+
+  // reloadParqueos — alias explícito para ser llamado desde fuera (POST)
+  const reloadParqueos = useCallback(async () => {
+    return await fetchParqueos();
+  }, [fetchParqueos]);
+
+  // Llamar al montar
+  useEffect(() => {
+    fetchParqueos();
+  }, [fetchParqueos]);
+
+  // -------------------------
+  // DeviceEventEmitter listener + AsyncStorage fallback (para recargar cuando se crea un parqueo)
   // -------------------------
   useEffect(() => {
-    let isUnmounted = false;
-    let reconnectAttempts = 0;
-    const maxReconnect = 8;
-
-    const connectWebSocket = () => {
+    const sub = DeviceEventEmitter.addListener('parqueoCreated', async () => {
+      console.log('DeviceEventEmitter: parqueoCreated recibido -> fetchParqueos()');
       try {
-        // Si ya hay una conexión abierta o en proceso, no re-creamos otra
-        if (ws.current && (ws.current.readyState === 0 || ws.current.readyState === 1)) {
-          console.log('WebSocket ya conectado o conectándose, readyState=', ws.current.readyState);
-          return;
-        }
-
-        console.log('Conectando WebSocket a', WEBSOCKET_URL);
-        ws.current = new WebSocket(WEBSOCKET_URL);
-
-        ws.current.onopen = () => {
-          console.log('WebSocket conectado (onopen).');
-          setIsWebSocketConnected(true);
-          reconnectAttempts = 0;
-        };
-
-        ws.current.onmessage = (e) => {
-          // Log RAW para debugging (puedes comentar luego)
-          console.log('WS RAW message:', typeof e.data === 'string' ? e.data : e.data);
-
+        await fetchParqueos();
+        // opcional: intentar centrar si se guardó coords en AsyncStorage
+        const coordsStr = await AsyncStorage.getItem('parkado_last_coords');
+        if (coordsStr) {
           try {
-            // Aceptamos: objeto único (parqueo), wrapper {event, data}, o array
-            const parsed = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-
-            // Si el servidor envía un wrapper { event, data }
-            if (parsed && typeof parsed === 'object' && parsed.event && parsed.data) {
-              handleIncomingPayload(parsed.data, parsed.event);
-              return;
+            const parsed = JSON.parse(coordsStr);
+            if (parsed?.latitude && parsed?.longitude && mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
+              mapRef.current.animateToRegion({
+                latitude: Number(parsed.latitude),
+                longitude: Number(parsed.longitude),
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              }, 500);
             }
-
-            // Si recibimos un array de parqueos
-            if (Array.isArray(parsed)) {
-              parsed.forEach(item => handleIncomingPayload(item, 'bulk'));
-              return;
-            }
-
-            // Si es un objeto individual (probablemente un parqueo)
-            handleIncomingPayload(parsed, 'single');
+            await AsyncStorage.removeItem('parkado_last_coords');
           } catch (err) {
-            console.error('Error al parsear mensaje WS:', err, 'raw:', e.data);
+            // ignore
+            console.warn('No se pudo parsear parkado_last_coords:', err);
           }
-        };
-
-        ws.current.onerror = (e: any) => {
-          console.error('WebSocket error (onerror):', e);
-          setIsWebSocketConnected(false);
-        };
-
-        ws.current.onclose = (e) => {
-          console.warn('WebSocket cerrado. code=', e?.code, 'reason=', e?.reason, 'wasClean=', e?.wasClean);
-          setIsWebSocketConnected(false);
-
-          if (isUnmounted) return;
-
-          // Backoff exponencial simple
-          if (reconnectAttempts < maxReconnect) {
-            const delay = Math.min(30000, 1000 * Math.pow(2, reconnectAttempts));
-            reconnectAttempts++;
-            console.log(`Reintentando conectar WS en ${delay} ms (attempt ${reconnectAttempts})`);
-            setTimeout(() => {
-              // sólo reconectar si no hay una conexión viva
-              if (!ws.current || ws.current.readyState === WebSocket.CLOSED) connectWebSocket();
-            }, delay);
-          } else {
-            console.warn('Máximo intentos de reconexión alcanzado para WS.');
-          }
-        };
-      } catch (error) {
-        console.error('Excepción al crear WebSocket:', error);
-        setIsWebSocketConnected(false);
-      }
-    };
-
-    // Maneja payloads entrantes desde el WS
-    const handleIncomingPayload = (payload: any, eventType: string) => {
-      if (!payload) return;
-      // Si el payload es un objeto que contiene un campo "parqueo" o "data", intentamos normalizar
-      const maybeParqueo = payload.parqueo ?? payload.data ?? payload;
-
-      const parqueoTransformado = transformarParqueo(maybeParqueo);
-      if (!parqueoTransformado) {
-        console.warn('Payload WS no corresponde a un parqueo válido:', payload);
-        return;
-      }
-
-      // Si no hay ID, no podemos hacer match con la lista existente => lo agregamos (o descartamos segun tu logica)
-      if (!parqueoTransformado.id) {
-        console.warn('Parqueo recibido sin ID — se ignorará la actualización en la lista existente. Considera que el backend devuelva id.');
-        // Opcional: si quieres añadirlo a la lista:
-        // setParqueos(prev => [...prev, parqueoTransformado]);
-        return;
-      }
-
-      // Actualizar lista existente
-      setParqueos(prevParqueos => {
-        let found = false;
-        const next = prevParqueos.map(p => {
-          if (p.id === parqueoTransformado.id) {
-            found = true;
-            return parqueoTransformado;
-          }
-          return p;
-        });
-
-        // Si no estaba en la lista, lo añadimos (opcional)
-        if (!found) {
-          return [...next, parqueoTransformado];
         }
-        return next;
-      });
-
-      // Si el parqueo seleccionado es el mismo, lo actualizamos
-      setSelectedParking(prev => (prev && prev.id === parqueoTransformado.id ? parqueoTransformado : prev));
-    };
-
-    connectWebSocket();
+      } catch (e) {
+        console.warn('Error fetchParqueos desde DeviceEventEmitter:', e);
+      }
+    });
 
     return () => {
-      isUnmounted = true;
-      if (ws.current) {
-        try {
-          ws.current.close();
-        } catch (err) {
-          // ignore
-        }
-        ws.current = null;
-      }
+      try { sub.remove(); } catch (err) { /* ignore */ }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedParking]);
+  }, [fetchParqueos]);
+
+  // Fallback: cuando la pantalla gana foco, chequeamos flag en AsyncStorage
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+
+      const checkFlag = async () => {
+        try {
+          const flag = await AsyncStorage.getItem('parkado_needs_reload');
+          if (!mounted) return;
+          if (flag === '1') {
+            console.log('Flag found parkado_needs_reload -> recargando parqueos');
+            await fetchParqueos();
+            await AsyncStorage.removeItem('parkado_needs_reload');
+            console.log('Flag removed parkado_needs_reload');
+            // también intentar centrar en coords si existen
+            const coordsStr = await AsyncStorage.getItem('parkado_last_coords');
+            if (coordsStr) {
+              try {
+                const parsed = JSON.parse(coordsStr);
+                if (parsed?.latitude && parsed?.longitude && mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
+                  mapRef.current.animateToRegion({
+                    latitude: Number(parsed.latitude),
+                    longitude: Number(parsed.longitude),
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }, 500);
+                }
+                await AsyncStorage.removeItem('parkado_last_coords');
+              } catch (err) {
+                console.warn('No se pudo parsear parkado_last_coords (focus):', err);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Error checando flag parkado_needs_reload:', e);
+        }
+      };
+
+      checkFlag();
+
+      return () => {
+        mounted = false;
+      };
+    }, [fetchParqueos])
+  );
 
   // -------------------------
   // Permisos y ubicación inicial
@@ -286,7 +273,7 @@ export const useMapa = () => {
           }
         }
       } catch (error: any) {
-        let errorMessage = 'No se pudo obtener la ubicación inicial. ';
+        let errorMessage = 'No se pudo obtener tu ubicación actual. ';
         if (error?.code === 'CANCELLED') {
           errorMessage += 'La solicitud fue cancelada.';
         } else if (error?.code === 'UNAVAILABLE') {
@@ -308,136 +295,78 @@ export const useMapa = () => {
   }, []);
 
   // -------------------------
-  // Cargar parqueos desde la API (GET)
-  // -------------------------
-  useEffect(() => {
-    let isMounted = true;
-    const fetchAndTransformParqueos = async () => {
-      setIsLoadingApi(true);
-      try {
-        const response = await axios.get(API_URL);
-        const remote = response?.data;
-
-        if (!Array.isArray(remote)) {
-          console.warn('Respuesta API parqueos no es array:', remote);
-          if (isMounted) setParqueos([]);
-          return;
-        }
-
-        const datosTransformados = remote
-          .map(transformarParqueo)
-          .filter((p: ParqueoParaVista | null): p is ParqueoParaVista => p !== null);
-
-        if (isMounted) setParqueos(datosTransformados);
-      } catch (e: any) {
-        console.error('Error cargando parqueos:', e);
-        if (isMounted) setErrorMsg('Error cargando parqueos. Revisa tu conexión.');
-      } finally {
-        if (isMounted) setIsLoadingApi(false);
-      }
-    };
-
-    fetchAndTransformParqueos();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // -------------------------
-  // Detectar params de ruta
-  // -------------------------
-  useEffect(() => {
-    const { destLat, destLng, destNombre } = params;
-
-    if (destLat && destLng && destNombre && userLocation) {
-      const targetLocation = {
-        latitude: parseFloat(destLat),
-        longitude: parseFloat(destLng),
-      };
-
-      if (
-        destination?.latitude === targetLocation.latitude &&
-        destination?.longitude === targetLocation.longitude
-      ) {
-        return;
-      }
-
-      setDestination(targetLocation);
-      setDestinationName(destNombre);
-      setSelectedParking(null);
-      setRouteCoordinates([]);
-
-      router.setParams({
-        destLat: undefined,
-        destLng: undefined,
-        destNombre: undefined,
-      });
-
-      fetchRoute(userLocation, targetLocation, destNombre);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params, userLocation]);
-
-  // -------------------------
-  // fetchRoute (sin cambios funcionales, sólo validaciones)
+  // fetchRoute (OSRM)
   // -------------------------
   const fetchRoute = useCallback(
-    async (origin: Coords, destinationCoords: Coords, destNombre?: string) => {
-      setIsLoadingRoute(true);
-      setRouteCoordinates([]);
-      setShowDirections(false);
+  async (origin: Coords, destinationCoords: Coords, destNombre?: string) => {
+    setIsLoadingRoute(true);
+    setRouteCoordinates([]);
+    setShowDirections(false);
 
-      try {
-        const url = `https://router.project-osrm.org/route/v1/driving/${origin.longitude},${origin.latitude};${destinationCoords.longitude},${destinationCoords.latitude}?overview=full&geometries=geojson`;
-        const response = await axios.get(url);
+    console.log("🌍 Fetching route...");
+    console.log("🛣️ Origen: ", origin);
+    console.log("📍 Destino: ", destinationCoords);
 
-        if (!response?.data || !Array.isArray(response.data.routes) || response.data.routes.length === 0) {
-          throw new Error('No se encontró ruta disponible');
-        }
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${origin.longitude},${origin.latitude};${destinationCoords.longitude},${destinationCoords.latitude}?overview=full&geometries=geojson`;
+      console.log("🌐 URL:", url);  // Log de la URL para verificar que la consulta es correcta
 
-        const geo = response.data.routes[0]?.geometry;
-        if (!geo || !Array.isArray(geo.coordinates)) {
-          throw new Error('Formato de ruta inesperado');
-        }
+      const response = await axios.get(url);
 
-        const coordinates = geo.coordinates
-          .map((coord: any) => {
-            if (!Array.isArray(coord) || coord.length < 2) return null;
-            const lat = Number(coord[1]);
-            const lng = Number(coord[0]);
-            if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
-            return { latitude: lat, longitude: lng };
-          })
-          .filter((c: any) => c !== null);
+      console.log("🚀 Response: ", response); // Verifica la respuesta completa de la API
 
-        setRouteCoordinates(coordinates as Coords[]);
-        setShowDirections(true);
-
-        if (mapRef.current && typeof mapRef.current.fitToCoordinates === 'function') {
-          try {
-            mapRef.current.fitToCoordinates([origin, destinationCoords], {
-              edgePadding: { top: 100, right: 50, bottom: 100, left: 50 },
-              animated: true,
-            });
-          } catch (err) {
-            console.warn('fitToCoordinates falló:', err);
-          }
-        } else {
-          console.warn('fitToCoordinates no disponible en mapRef.current');
-        }
-      } catch (error: any) {
-        Alert.alert('Error', `No se pudo trazar la ruta${destNombre ? ` a ${destNombre}` : ''}.`);
-        setShowDirections(false);
-        console.error('Error fetchRoute:', error);
-      } finally {
-        setIsLoadingRoute(false);
+      if (!response?.data || !Array.isArray(response.data.routes) || response.data.routes.length === 0) {
+        throw new Error('No se encontró ruta disponible');
       }
-    },
-    []
-  );
+
+      const geo = response.data.routes[0]?.geometry;
+      console.log("🗺️ Ruta encontrada: ", geo);
+
+      if (!geo || !Array.isArray(geo.coordinates)) {
+        throw new Error('Formato de ruta inesperado');
+      }
+
+      const coordinates = geo.coordinates
+        .map((coord: any) => {
+          if (!Array.isArray(coord) || coord.length < 2) return null;
+          const lat = Number(coord[1]);
+          const lng = Number(coord[0]);
+          if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+          return { latitude: lat, longitude: lng };
+        })
+        .filter((c: any) => c !== null);
+
+      console.log("📍 Coordenadas de la ruta: ", coordinates);  // Verifica las coordenadas de la ruta
+
+      setRouteCoordinates(coordinates as Coords[]);
+      setShowDirections(true);
+
+      if (mapRef.current && typeof mapRef.current.fitToCoordinates === 'function') {
+        try {
+          mapRef.current.fitToCoordinates([origin, destinationCoords], {
+            edgePadding: { top: 100, right: 50, bottom: 100, left: 50 },
+            animated: true,
+          });
+        } catch (err) {
+          console.warn('fitToCoordinates falló:', err);
+        }
+      } else {
+        console.warn('fitToCoordinates no disponible en mapRef.current');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', `No se pudo trazar la ruta${destNombre ? ` a ${destNombre}` : ''}.`);
+      setShowDirections(false);
+      console.error('Error fetchRoute:', error);
+    } finally {
+      setIsLoadingRoute(false);
+    }
+  },
+  []
+);
+
 
   // -------------------------
-  // Acciones (centrar, zoom, marcadores, etc.)
+  // UI actions: centrar, zoom, marker press, clear, show directions
   // -------------------------
   const handleCenterOnUser = useCallback(async () => {
     setIsLocating(true);
@@ -446,11 +375,7 @@ export const useMapa = () => {
     try {
       const servicesEnabled = await Location.hasServicesEnabledAsync();
       if (!servicesEnabled) {
-        Alert.alert(
-          'Ubicación desactivada',
-          'Los servicios de ubicación están desactivados. Por favor, actívalos en la configuración de tu dispositivo.',
-          [{ text: 'OK' }]
-        );
+        Alert.alert('Ubicación desactivada', 'Activa ubicación en el dispositivo.');
         return;
       }
 
@@ -461,9 +386,7 @@ export const useMapa = () => {
       }
 
       if (status !== 'granted') {
-        Alert.alert('Permiso requerido', 'Se necesita permiso de ubicación para centrar el mapa en tu ubicación actual.', [
-          { text: 'OK' },
-        ]);
+        Alert.alert('Permiso requerido', 'Se necesita permiso de ubicación para centrar el mapa en tu ubicación actual.', [{ text: 'OK' }]);
         return;
       }
 
@@ -501,33 +424,21 @@ export const useMapa = () => {
         }
       } else if (mapRef.current && typeof mapRef.current.animateCamera === 'function') {
         try {
-          mapRef.current.animateCamera(
-            {
-              center: newCoords,
-              pitch: 0,
-              heading: 0,
-              altitude: 0,
-            },
-            { duration: 1000 }
-          );
+          mapRef.current.animateCamera({ center: newCoords, pitch: 0, heading: 0, altitude: 0 }, { duration: 1000 });
         } catch (err) {
           console.warn('animateCamera falló al centrar en el usuario:', err);
         }
       } else {
-        setRegion({
-          ...newCoords,
-          latitudeDelta: INITIAL_DELTA,
-          longitudeDelta: INITIAL_DELTA,
-        });
+        setRegion({ ...newCoords, latitudeDelta: INITIAL_DELTA, longitudeDelta: INITIAL_DELTA });
       }
     } catch (error: any) {
       let errorMessage = 'No se pudo obtener tu ubicación actual. ';
       if (error?.code === 'CANCELLED') {
         errorMessage += 'La solicitud fue cancelada.';
       } else if (error?.code === 'UNAVAILABLE') {
-        errorMessage += 'Los servicios de ubicación no están disponibles. Verifica que la ubicación esté activada en tu dispositivo.';
+        errorMessage += 'Los servicios de ubicación no están disponibles.';
       } else if (error?.code === 'TIMEOUT') {
-        errorMessage += 'El tiempo de espera se agotado. Intenta nuevamente.';
+        errorMessage += 'El tiempo de espera se agotado.';
       } else {
         errorMessage += 'Verifica tu conexión y configuración de ubicación.';
       }
@@ -657,10 +568,13 @@ export const useMapa = () => {
   );
 
   // -------------------------
-  // Retorno del hook
+  // Retorno del hook (incluye reloadParqueos)
   // -------------------------
   return {
+    // Refs
     mapRef,
+
+    // State
     region,
     userLocation,
     errorMsg,
@@ -674,9 +588,8 @@ export const useMapa = () => {
     isLoadingRoute,
     showDirections,
     isLocating,
-    isWebSocketConnected,
 
-    // actions
+    // Actions
     setRegion,
     setSelectedParking,
     handleCenterOnUser,
@@ -685,5 +598,9 @@ export const useMapa = () => {
     handleClearSelection,
     handleShowDirectionsFromPopup,
     cerrarSoloPopup,
+
+    // Utilities
+    fetchParqueos, // para uso interno si lo necesitás
+    reloadParqueos, // <-- LLAMA ESTO DESPUÉS DEL POST PARA RECARGAR EL MAPA
   };
 };

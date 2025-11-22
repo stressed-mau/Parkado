@@ -7,14 +7,17 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Logo from "../assets/Logo";
 
-export default function PerfilUsuario() {
-  const id = 17;
+export default function PerfilUsuario({ navigation }) {
   const [usuario, setUsuario] = useState(null);
   const [reservas, setReservas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState(null);
+  const [token, setToken] = useState(null);
 
   const colores = {
     azul: "#7BB3CD",
@@ -27,15 +30,42 @@ export default function PerfilUsuario() {
   const placeholderLocal =
     "file:///mnt/data/e6160939-b67a-4a41-8e50-9802c507f7e1.png";
 
-  const USUARIO_API = `${BACKEND_BASE}/api/usuarios/${id}`;
-  const RESERVAS_API = `${BACKEND_BASE}/api/reservas/usuario/${id}`;
-
+  // 🔥 CARGAR ID Y TOKEN DESDE ASYNC_STORAGE
   useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem("userData");
+        if (!raw) {
+          Alert.alert("Error", "No estás autenticado.");
+          return;
+        }
+
+        const userData = JSON.parse(raw);
+
+        setUserId(userData.id);
+        setToken(userData.token);
+      } catch (e) {
+        console.error("Error leyendo userData:", e);
+      }
+    })();
+  }, []);
+
+  // 🔥 Cargar datos cuando ya tengamos id y token
+  useEffect(() => {
+    if (!userId || !token) return;
+
     async function fetchData() {
       try {
+        const USUARIO_API = `${BACKEND_BASE}/api/usuarios/${userId}`;
+        const RESERVAS_API = `${BACKEND_BASE}/api/reservas/usuario/${userId}`;
+
         const [resUser, resReservas] = await Promise.all([
-          axios.get(USUARIO_API),
-          axios.get(RESERVAS_API),
+          axios.get(USUARIO_API, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          axios.get(RESERVAS_API, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
         ]);
 
         setUsuario(resUser.data);
@@ -46,14 +76,14 @@ export default function PerfilUsuario() {
 
         setReservas(array);
       } catch (e) {
-        console.log(e);
+        console.log("Error cargando datos:", e);
       } finally {
         setLoading(false);
       }
     }
 
     fetchData();
-  }, []);
+  }, [userId, token]);
 
   if (loading)
     return (
@@ -102,6 +132,9 @@ export default function PerfilUsuario() {
       <TouchableOpacity
         className="flex-row items-center justify-center py-3 rounded-xl mb-6"
         style={{ backgroundColor: colores.azul }}
+        onPress={() => {
+          if (navigation?.navigate) navigation.navigate("EditarPerfil");
+        }}
       >
         <Text className="text-white font-semibold text-lg">Editar perfil</Text>
       </TouchableOpacity>
@@ -131,16 +164,15 @@ export default function PerfilUsuario() {
 
             const nombre = parqueo?.nombre || "Nombre no disponible";
             const direccion = parqueo?.direccion || "Ubicación no disponible";
-            const nroPlaza = reserva?.plaza?.nroPlaza || reserva?.nroPlaza || "N/A";
+            const nroPlaza =
+              reserva?.plaza?.nroPlaza || reserva?.nroPlaza || "N/A";
 
-            // PLACA
             const placa =
               reserva?.matriculaVehiculo ||
               reserva?.vehiculo?.placa ||
               reserva?.placa ||
               "N/D";
 
-            // 🔥 TIPO VEHÍCULO: usa helper robusto
             const tipoVehiculo = getTipoVehiculo(reserva);
 
             const desde = reserva?.fechaHoraIni
@@ -193,8 +225,6 @@ export default function PerfilUsuario() {
                         <Text className="font-semibold">Hasta:</Text> {hasta}
                       </Text>
                     )}
-
-                    
                   </View>
                 </View>
               </View>
@@ -257,9 +287,8 @@ function formatDate(iso) {
   }
 }
 
-/** Devuelve "Auto" | "Moto" | "N/D" a partir de la reserva/vehículo */
+/** Devuelve "Auto" | "Moto" | "N/D" */
 function getTipoVehiculo(reserva) {
-  // intenta varias rutas donde la API podría devolver el id
   const candidates = [
     reserva?.tipoVehiculo,
     reserva?.vehiculo?.tipoVehiculoId,
@@ -268,17 +297,13 @@ function getTipoVehiculo(reserva) {
     reserva?.tipoVehiculoId,
   ];
 
-  // toma el primero no nulo/undefined
-  let raw = candidates.find((c) => c !== undefined && c !== null);
+  let raw = candidates.find((c) => c != null);
 
-  // si sigue undefined, intenta campos con strings (por si viene anidado distinto)
-  if (raw === undefined || raw === null) {
-    // por si acaso la API en vez del id devuelve un objeto con id: { id: 1 }
+  if (raw == null) {
     if (reserva?.vehiculo?.tipo?.id) raw = reserva.vehiculo.tipo.id;
     else if (reserva?.tipo?.id) raw = reserva.tipo.id;
   }
 
-  // fuerza número (si viene "1" o "2")
   const idNum = Number(raw);
 
   if (!Number.isNaN(idNum)) {
@@ -286,7 +311,6 @@ function getTipoVehiculo(reserva) {
     if (idNum === 2) return "Moto";
   }
 
-  // por último, si la API devuelve palabras en texto
   const rawStr = String(raw || "").toLowerCase();
   if (rawStr.includes("auto") || rawStr.includes("car")) return "Auto";
   if (rawStr.includes("moto") || rawStr.includes("motor")) return "Moto";

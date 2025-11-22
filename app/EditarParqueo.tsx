@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import MapView, { MapPressEvent, Marker } from "react-native-maps";
 import { Button, Checkbox } from "react-native-paper";
-import Logo from "../../assets/Logo";
+import Logo from "../assets/Logo";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 
@@ -721,7 +721,7 @@ export default function EditarEstacionamiento({ route, navigation }: any) {
 
   const renderPagina2 = () => (
     <ScrollView contentInsetAdjustmentBehavior="automatic"
- className="flex-1 px-5 py-4" style={{ backgroundColor: "#F6EEE4" }}>
+ className="flex-1 px-5 py-8" style={{ backgroundColor: "#F6EEE4" }}>
       <Text className="text-2xl font-bold text-center mb-6" style={{ color: "#F2BD2B" }}>
         HORARIOS DE ATENCIÓN
       </Text>

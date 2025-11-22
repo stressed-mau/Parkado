@@ -32,7 +32,7 @@ const MapUI: React.FC<MapUIProps> = ({
       {/* Botón de ubicación */}
       <TouchableOpacity
         onPress={onCenterOnUser}
-        className="absolute top-24 right-6 z-10 w-14 h-14 bg-white rounded-full items-center justify-center shadow-lg active:bg-gray-200 elevation-5"
+        className="absolute top-28 right-8 z-10 w-14 h-14 bg-white rounded-full items-center justify-center shadow-lg active:bg-gray-200 elevation-5"
         disabled={isLocating}
       >
         {isLocating ? (
@@ -42,7 +42,7 @@ const MapUI: React.FC<MapUIProps> = ({
         )}
       </TouchableOpacity>
 
-      {/* Controles de zoom */}
+     {/*  
       <View className="absolute bottom-24 right-6 z-10 flex-col space-y-3" style={{ elevation: 5 }}>
         <TouchableOpacity 
           onPress={() => onZoom(0.8)} 
@@ -56,7 +56,7 @@ const MapUI: React.FC<MapUIProps> = ({
         >
           <Feather name="minus" size={28} color="#4b5563" />
         </TouchableOpacity>
-      </View>
+      </View> */}
 
       {/* Botón de limpiar ruta */}
       {showDirections && (

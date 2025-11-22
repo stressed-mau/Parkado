@@ -1,6 +1,7 @@
 import { Region } from 'react-native-maps';
 
 export const API_URL = 'https://parkado-backend.vercel.app/api/parqueos/details';
+export const WEBSOCKET_URL = 'wss://parkado-backend.onrender.com'; // Nuevo WebSocket
 export const INITIAL_DELTA = 0.04;
 export const COCHABAMBA_REGION: Region = { 
   latitude: -17.3936, 

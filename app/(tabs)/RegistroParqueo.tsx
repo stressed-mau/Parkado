@@ -1,8 +1,10 @@
+// screens/RegistroEstacionamiento.tsx
 import { MaterialIcons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -13,17 +15,27 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import MapView, { MapPressEvent, Marker } from "react-native-maps";
 import { Button, Checkbox } from "react-native-paper";
 import Logo from "../../assets/Logo";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+/**
+ * RUTAS LOCALES A LOS PDF SUBIDOS (referencia)
+ */
+const DOC_PATH_1 = "/mnt/data/Apis PArkado.pdf";
+const DOC_PATH_2 = "/mnt/data/MODIFICACION DE APIS mas servisios.pdf";
 
 export default function RegistroEstacionamiento() {
+  const insets = useSafeAreaInsets();
   const [pagina, setPagina] = useState(1);
 
   const [form, setForm] = useState({
     nombre: "",
     telefono: "",
+    direccion: "",
     capacidadAutos: "",
     capacidadMotos: "",
     tarifaAutos: "",
@@ -64,36 +76,41 @@ export default function RegistroEstacionamiento() {
     { key: "domingo", label: "Domingo" },
   ];
 
-  // -------------------------
-  // Permisos de ubicación
-  // -------------------------
+  // Obtener permisos y coords iniciales
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === "granted") {
-        const loc = await Location.getCurrentPositionAsync({});
-        setLocation({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        });
-        setForm((f) => ({
-          ...f,
-          latitud: String(loc.coords.latitude),
-          longitud: String(loc.coords.longitude),
-        }));
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          const loc = await Location.getCurrentPositionAsync({});
+          setLocation({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+          setForm((f) => ({
+            ...f,
+            latitud: String(loc.coords.latitude),
+            longitud: String(loc.coords.longitude),
+          }));
+        }
+      } catch (e) {
+        console.warn("No se pudo obtener ubicación inicial:", e);
       }
     })();
   }, []);
 
-  // -------------------------
-  // Funciones auxiliares
-  // -------------------------
-  const pickImage = async (setUri: (uri: string) => void) => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    });
-    if (!result.canceled) setUri(result.assets[0].uri);
+  // Pick image
+  const pickImage = async (setUri: (uri: string | null) => void) => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+      if (!result.canceled) setUri(result.assets[0].uri);
+    } catch (e) {
+      console.error("Error pick image:", e);
+      Alert.alert("Error", "No se pudo seleccionar la imagen.");
+    }
   };
 
   const handleInput = (key: string, value: string) => {
@@ -112,26 +129,24 @@ export default function RegistroEstacionamiento() {
     });
   };
 
-  // -------------------------
-  // Manejo de horarios - CORREGIDO
-  // -------------------------
+  // Horarios picker
   const handleTimeChange = (event: any, selectedDate?: Date) => {
+    // En Android suele recibir event; en iOS selectedDate puede ser undefined si cancela
     setShowPicker(false);
-    
+
     if (selectedDate && pickerInfo) {
       const { dia, tipo } = pickerInfo;
-      // Formatear la hora correctamente en formato 24h
-      const hours = selectedDate.getHours().toString().padStart(2, '0');
-      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+      const hours = selectedDate.getHours().toString().padStart(2, "0");
+      const minutes = selectedDate.getMinutes().toString().padStart(2, "0");
       const formattedTime = `${hours}:${minutes}`;
-      
+
       setForm((prev) => ({
         ...prev,
         horarios: {
           ...prev.horarios,
-          [dia]: { 
-            ...prev.horarios[dia as keyof typeof prev.horarios], 
-            [tipo]: formattedTime 
+          [dia]: {
+            ...prev.horarios[dia as keyof typeof prev.horarios],
+            [tipo]: formattedTime,
           },
         },
       }));
@@ -139,213 +154,173 @@ export default function RegistroEstacionamiento() {
   };
 
   const openTimePicker = (dia: string, tipo: "apertura" | "cierre", currentTime: string) => {
-    const [hours, minutes] = currentTime.split(':').map(Number);
+    const [hours, minutes] = currentTime.split(":").map(Number);
     const date = new Date();
     date.setHours(hours, minutes, 0, 0);
-    
+
     setTempTime(date);
     setPickerInfo({ dia, tipo });
     setShowPicker(true);
   };
 
-  // -------------------------
-  // Subida a Cloudinary - CORREGIDA
-  // -------------------------
+  // Upload Cloudinary
   const uploadToCloudinary = async (uri: string) => {
     try {
       const formData = new FormData();
-      
-      // Obtener el tipo MIME correcto basado en la extensión del archivo
-      const fileType = uri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-      
-      formData.append('file', {
+
+      const fileType = uri.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+
+      formData.append("file", {
         uri,
         type: fileType,
-        name: `upload_${Date.now()}.${fileType === 'image/png' ? 'png' : 'jpg'}`,
+        name: `upload_${Date.now()}.${fileType === "image/png" ? "png" : "jpg"}`,
       } as any);
-      
-      formData.append('upload_preset', 'Parkado'); // ⚠️ cambia por tu preset
-      formData.append('cloud_name', 'dthb7c50y'); // ⚠️ cambia por tu cloud name
 
-      console.log('Subiendo imagen a Cloudinary...');
-      
+      formData.append("upload_preset", "Parkado");
+      formData.append("cloud_name", "dthb7c50y");
+
       const response = await fetch(
-        `https://api.cloudinary.com/v1_1/dthb7c50y/image/upload`, // ⚠️ cambia por tu cloud name
+        `https://api.cloudinary.com/v1_1/dthb7c50y/image/upload`,
         {
-          method: 'POST',
+          method: "POST",
           body: formData,
           headers: {
-            'Accept': 'application/json',
+            Accept: "application/json",
           },
         }
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const txt = await response.text();
+        console.error("Cloudinary error:", txt);
+        return null;
       }
-
       const data = await response.json();
-      console.log('Imagen subida exitosamente:', data.secure_url);
       return data.secure_url;
     } catch (error) {
-      console.error('Error detallado al subir imagen:', error);
+      console.error("Error uploading to cloudinary:", error);
       return null;
     }
   };
 
-  // -------------------------
-  // Envío del formulario - CORREGIDO
-  // -------------------------
+  // Leer usuario actual
+  const obtenerUsuarioActual = async () => {
+    try {
+      const data = await AsyncStorage.getItem("userData");
+      if (!data) return null;
+      return JSON.parse(data);
+    } catch (e) {
+      console.error("Error leyendo userData:", e);
+      return null;
+    }
+  };
+
+  // Envío formulario
   const handleSubmit = async () => {
     try {
-      // Validaciones básicas
       if (!form.nombre.trim() || !form.latitud || !form.longitud) {
         Alert.alert("Campos incompletos", "Por favor completa todos los campos obligatorios.");
         return;
       }
 
-      console.log("Iniciando envío del formulario...");
+      const usuario = await obtenerUsuarioActual();
+      if (!usuario || !usuario.id) {
+        Alert.alert("Error", "Usuario no autenticado. Inicia sesión para registrar el parqueo.");
+        return;
+      }
+      const propietarioIdReal = usuario.id;
 
-      // Subir imágenes
       const urlsFotos: string[] = [];
-      
       if (fotoUri) {
-        console.log("Subiendo foto de referencia...");
-        const fotoUrl = await uploadToCloudinary(fotoUri);
-        if (fotoUrl) {
-          urlsFotos.push(fotoUrl);
-          console.log("✅ Foto subida:", fotoUrl);
-        } else {
-          console.error("❌ Error al subir foto de referencia");
-          Alert.alert("Error", "No se pudo subir la foto de referencia");
+        const u = await uploadToCloudinary(fotoUri);
+        if (u) urlsFotos.push(u);
+        else {
+          Alert.alert("Error", "No se pudo subir la foto de referencia.");
           return;
         }
       }
-
       if (licenciaUri) {
-        console.log("Subiendo licencia...");
-        const licenciaUrl = await uploadToCloudinary(licenciaUri);
-        if (licenciaUrl) {
-          urlsFotos.push(licenciaUrl);
-          console.log("✅ Licencia subida:", licenciaUrl);
-        } else {
-          console.error("❌ Error al subir licencia");
-          Alert.alert("Error", "No se pudo subir la licencia de funcionamiento");
+        const u = await uploadToCloudinary(licenciaUri);
+        if (u) urlsFotos.push(u);
+        else {
+          Alert.alert("Error", "No se pudo subir la licencia de funcionamiento.");
           return;
         }
       }
 
-      // CORRECCIÓN CRÍTICA: Formato de horarios para el backend
       const horariosParaBackend = diasSemana.map(({ key, label }) => {
         const horario = form.horarios[key as keyof typeof form.horarios];
         return {
-          diaSemana: label.toUpperCase(), // "LUNES", "MARTES", etc.
+          diaSemana: label.toUpperCase(),
           horaAbrir: horario.abierto ? horario.apertura : "00:00",
           horaCerrar: horario.abierto ? horario.cierre : "00:00",
           esCerrado: !horario.abierto,
         };
       });
 
-      // Construir body corregido
       const body = {
         nombre: form.nombre.trim(),
-        direccion: "Dirección seleccionada en mapa", // Puedes mejorar esto después
+        direccion: (form.direccion || "").trim(),
         tipoLugar: form.tipoLugar === "un_piso" ? "Un Piso" : "Edificio",
-        propietarioId: 2, // ⚠️ Esto debería venir de la autenticación
+        propietarioId: propietarioIdReal,
         latitud: parseFloat(form.latitud),
         longitud: parseFloat(form.longitud),
         capacidades: [
-          { 
-            cantidad: parseInt(form.capacidadAutos) || 0, 
-            tipoVehiculoId: 1 
-          },
-          { 
-            cantidad: parseInt(form.capacidadMotos) || 0, 
-            tipoVehiculoId: 2 
-          },
+          { cantidad: parseInt(form.capacidadAutos) || 0, tipoVehiculoId: 1 },
+          { cantidad: parseInt(form.capacidadMotos) || 0, tipoVehiculoId: 2 },
         ],
         serviciosAsociados: serviciosSeleccionados,
         tarifas: [
-          { 
-            descripcion: "Hora Auto", 
-            precioHora: parseFloat(form.tarifaAutos) || 0, 
-            tipoVehiculoId: 1 
-          },
-          { 
-            descripcion: "Hora Moto", 
-            precioHora: parseFloat(form.tarifaMotos) || 0, 
-            tipoVehiculoId: 2 
-          },
-          { 
-            descripcion: "Día Auto", 
-            precioHora: parseFloat(form.tarifaAutosDia) || 0, 
-            tipoVehiculoId: 1 
-          },
-          { 
-            descripcion: "Día Moto", 
-            precioHora: parseFloat(form.tarifaMotosDia) || 0, 
-            tipoVehiculoId: 2 
-          },
+          { descripcion: "Hora Auto", precioHora: parseFloat(form.tarifaAutos) || 0, tipoVehiculoId: 1 },
+          { descripcion: "Hora Moto", precioHora: parseFloat(form.tarifaMotos) || 0, tipoVehiculoId: 2 },
+          { descripcion: "Día Auto", precioHora: parseFloat(form.tarifaAutosDia) || 0, tipoVehiculoId: 1 },
+          { descripcion: "Día Moto", precioHora: parseFloat(form.tarifaMotosDia) || 0, tipoVehiculoId: 2 },
         ],
-        horarios: horariosParaBackend, // Usar el formato corregido
+        horarios: horariosParaBackend,
         fotos: urlsFotos.map((url) => ({ url })),
       };
 
-      console.log("Datos a enviar:", JSON.stringify(body, null, 2));
+      console.log("Enviando parqueo:", JSON.stringify(body, null, 2));
 
-      const response = await fetch(
-        "https://parkado-backend.vercel.app/api/parqueos/complete",
-        {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
-        }
-      );
+      const response = await fetch("https://parkado-backend.vercel.app/api/parqueos/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
 
       const data = await response.json();
 
       if (response.ok) {
-        Alert.alert(
-          "✅ Éxito", 
-          "Parqueo registrado correctamente.",
-          [{ text: "OK", onPress: () => console.log("Registro completado") }]
-        );
-        console.log("✅ Respuesta del servidor:", data);
-        
-        // Opcional: Resetear el formulario
+        Alert.alert("✅ Éxito", "Parqueo registrado correctamente.");
         setPagina(1);
-        
       } else {
-        console.error("❌ Error del servidor:", data);
-        Alert.alert(
-          "❌ Error", 
-          data.message || "No se pudo registrar el parqueo. Verifica los datos."
-        );
+        console.error("Respuesta error del servidor:", data);
+        Alert.alert("❌ Error", data.message || "No se pudo registrar el parqueo.");
       }
     } catch (error) {
-      console.error("❌ Error general:", error);
+      console.error("Error general al enviar:", error);
       Alert.alert(
-        "Error de conexión", 
+        "Error de conexión",
         "Ocurrió un problema al enviar el formulario. Verifica tu conexión a internet."
       );
     }
   };
 
-  // -------------------------
-  // Página 1 — Datos Generales
-  // -------------------------
+  // Página 1
   const renderPagina1 = () => (
-    <ScrollView className="flex-1 px-5 py-4" style={{ backgroundColor: "#F6EEE4" }}>
+    <ScrollView
+      className="flex-1 px-5 py-4"
+      style={{ backgroundColor: "#F6EEE4" }}
+      // padding pequeño para que el botón no quede cortado por el bottom-tab
+      contentContainerStyle={{ paddingBottom: insets.bottom + 6 }}
+      keyboardShouldPersistTaps="handled"
+    >
       <Logo />
       <Text className="text-2xl font-bold text-center mb-4" style={{ color: "#F2BD2B" }}>
         REGISTRO DEL ESTACIONAMIENTO
       </Text>
 
-      {/* Campo NOMBRE */}
+      {/* Nombre */}
       <View className="mb-4">
         <Text className="mb-1 font-medium" style={{ color: "#B2A83F" }}>
           Nombre del estacionamiento *
@@ -359,6 +334,21 @@ export default function RegistroEstacionamiento() {
         />
       </View>
 
+      {/* Dirección manual */}
+      <View className="mb-4">
+        <Text className="mb-1 font-medium" style={{ color: "#B2A83F" }}>
+          Dirección (manual)
+        </Text>
+        <TextInput
+          className="rounded-lg px-3 py-2 bg-white border border-[#7BB3CD]"
+          value={form.direccion}
+          onChangeText={(text) => handleInput("direccion", text)}
+          placeholder="Ej: Calle 1 #123"
+          placeholderTextColor="#9CA3AF"
+        />
+      </View>
+
+      {/* Tel/Capacidades/Tarifas */}
       {[
         ["telefono", "Teléfono", "phone-pad"],
         ["capacidadAutos", "Capacidad total de autos", "numeric"],
@@ -374,7 +364,7 @@ export default function RegistroEstacionamiento() {
           </Text>
           <TextInput
             className="rounded-lg px-3 py-2 bg-white border border-[#7BB3CD]"
-            value={String(form[key as keyof typeof form])}
+            value={String((form as any)[key])}
             onChangeText={(text) => handleInput(key, text)}
             placeholder={label}
             placeholderTextColor="#9CA3AF"
@@ -388,18 +378,13 @@ export default function RegistroEstacionamiento() {
         <Text className="mb-2 font-medium" style={{ color: "#B2A83F" }}>
           Servicios Asociados
         </Text>
-        {[
-          { id: 1, nombre: "Lavado de autos" },
-          { id: 2, nombre: "Inflado de llantas" },
-        ].map((serv) => (
+        {[{ id: 1, nombre: "Lavado de autos" }, { id: 2, nombre: "Inflado de llantas" }].map((serv) => (
           <View key={serv.id} className="flex-row items-center mb-1">
             <Checkbox
               status={serviciosSeleccionados.includes(serv.id) ? "checked" : "unchecked"}
               onPress={() =>
                 setServiciosSeleccionados((prev) =>
-                  prev.includes(serv.id)
-                    ? prev.filter((s) => s !== serv.id)
-                    : [...prev, serv.id]
+                  prev.includes(serv.id) ? prev.filter((s) => s !== serv.id) : [...prev, serv.id]
                 )
               }
               color="#7BB3CD"
@@ -461,18 +446,17 @@ export default function RegistroEstacionamiento() {
         </Text>
         {licenciaUri ? (
           <View className="relative items-center">
-            <Image source={{ uri: licenciaUri }} className="w-40 h-40 rounded-lg" />
+            <Image source={{ uri: licenciaUri }} style={{ width: 160, height: 160 }} />
             <TouchableOpacity
-              className="absolute top-1 right-1 bg-red-500 rounded-full p-1"
+              style={{ position: "absolute", top: 6, right: 6, backgroundColor: "#f44336", borderRadius: 20, padding: 6 }}
               onPress={() => setLicenciaUri(null)}
             >
-              <MaterialIcons name="delete" size={22} color="white" />
+              <MaterialIcons name="delete" size={18} color="white" />
             </TouchableOpacity>
           </View>
         ) : (
           <TouchableOpacity
-            className="border rounded-lg items-center py-3 bg-white"
-            style={{ borderColor: "#7BB3CD" }}
+            style={{ borderWidth: 1, borderColor: "#7BB3CD", borderRadius: 8, paddingVertical: 12, alignItems: "center", backgroundColor: "white" }}
             onPress={() => pickImage((uri) => setLicenciaUri(uri))}
           >
             <MaterialIcons name="add-photo-alternate" size={24} color="#7BB3CD" />
@@ -488,18 +472,17 @@ export default function RegistroEstacionamiento() {
         </Text>
         {fotoUri ? (
           <View className="relative items-center">
-            <Image source={{ uri: fotoUri }} className="w-40 h-40 rounded-lg" />
+            <Image source={{ uri: fotoUri }} style={{ width: 160, height: 160 }} />
             <TouchableOpacity
-              className="absolute top-1 right-1 bg-red-500 rounded-full p-1"
+              style={{ position: "absolute", top: 6, right: 6, backgroundColor: "#f44336", borderRadius: 20, padding: 6 }}
               onPress={() => setFotoUri(null)}
             >
-              <MaterialIcons name="delete" size={22} color="white" />
+              <MaterialIcons name="delete" size={18} color="white" />
             </TouchableOpacity>
           </View>
         ) : (
           <TouchableOpacity
-            className="border rounded-lg items-center py-3 bg-white"
-            style={{ borderColor: "#7BB3CD" }}
+            style={{ borderWidth: 1, borderColor: "#7BB3CD", borderRadius: 8, paddingVertical: 12, alignItems: "center", backgroundColor: "white" }}
             onPress={() => pickImage((uri) => setFotoUri(uri))}
           >
             <MaterialIcons name="add-a-photo" size={24} color="#7BB3CD" />
@@ -512,22 +495,27 @@ export default function RegistroEstacionamiento() {
         * Campos obligatorios
       </Text>
 
-      <Button
-        mode="contained"
-        onPress={() => setPagina(2)}
-        style={{ backgroundColor: "#7BB3CD", borderRadius: 50, marginTop: 30 }}
-        labelStyle={{ fontSize: 16, fontWeight: "bold" }}
-      >
-        Siguiente → Horarios
-      </Button>
+      <View style={{ marginTop: 30, marginBottom: Math.max(6, insets.bottom) }}>
+        <Button
+          mode="contained"
+          onPress={() => setPagina(2)}
+          style={{ backgroundColor: "#7BB3CD", borderRadius: 50 }}
+          labelStyle={{ fontSize: 16, fontWeight: "bold" }}
+        >
+          Siguiente → Horarios
+        </Button>
+      </View>
     </ScrollView>
   );
 
-  // -------------------------
-  // Página 2 — Horarios - COMPLETAMENTE CORREGIDA
-  // -------------------------
+  // Página 2 — Horarios
   const renderPagina2 = () => (
-    <ScrollView className="flex-1 px-5 py-4" style={{ backgroundColor: "#F6EEE4" }}>
+    <ScrollView
+      className="flex-1 px-5 py-8"
+      style={{ backgroundColor: "#F6EEE4" }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 6 }}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text className="text-2xl font-bold text-center mb-6" style={{ color: "#F2BD2B" }}>
         HORARIOS DE ATENCIÓN
       </Text>
@@ -541,24 +529,20 @@ export default function RegistroEstacionamiento() {
           value={tempTime}
           mode="time"
           is24Hour={true}
-          display="spinner"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
           onChange={handleTimeChange}
         />
       )}
 
       {diasSemana.map(({ key, label }) => {
         const horario = form.horarios[key as keyof typeof form.horarios];
-        
+
         return (
-          <View key={key} className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-200">
-            <View className="flex-row justify-between items-center mb-3">
-              <Text className="text-lg font-semibold capitalize" style={{ color: "#B2A83F" }}>
-                {label}
-              </Text>
-              <View className="flex-row items-center">
-                <Text className={`text-sm mr-2 ${horario.abierto ? 'text-green-600' : 'text-red-600'}`}>
-                  {horario.abierto ? 'Abierto' : 'Cerrado'}
-                </Text>
+          <View key={key} style={{ backgroundColor: "white", borderRadius: 10, padding: 12, marginBottom: 10 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <Text style={{ fontSize: 16, fontWeight: "600", color: "#B2A83F" }}>{label}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Text style={{ marginRight: 8, color: horario.abierto ? "#16a34a" : "#dc2626" }}>{horario.abierto ? "Abierto" : "Cerrado"}</Text>
                 <Switch
                   value={horario.abierto}
                   onValueChange={() =>
@@ -566,105 +550,64 @@ export default function RegistroEstacionamiento() {
                       ...prev,
                       horarios: {
                         ...prev.horarios,
-                        [key]: { 
-                          ...prev.horarios[key as keyof typeof prev.horarios], 
-                          abierto: !prev.horarios[key as keyof typeof prev.horarios].abierto 
+                        [key]: {
+                          ...prev.horarios[key as keyof typeof prev.horarios],
+                          abierto: !prev.horarios[key as keyof typeof prev.horarios].abierto,
                         },
                       },
                     }))
                   }
                   thumbColor={horario.abierto ? "#7BB3CD" : "#f4f3f4"}
-                  trackColor={{ false: "#767577", true: "#81b0ff" }}
                 />
               </View>
             </View>
 
-            {horario.abierto && (
-              <View className="flex-row justify-between">
-                <TouchableOpacity
-                  className="flex-row items-center justify-between border rounded-lg px-4 py-3 bg-blue-50 w-[48%]"
-                  style={{ borderColor: "#7BB3CD" }}
-                  onPress={() => openTimePicker(key, "apertura", horario.apertura)}
-                >
-                  <View className="flex-row items-center">
-                    <MaterialIcons name="schedule" size={20} color="#7BB3CD" />
-                    <Text className="ml-2 font-medium">Apertura</Text>
-                  </View>
-                  <Text className="font-bold text-lg">{horario.apertura}</Text>
+            {horario.abierto ? (
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <TouchableOpacity onPress={() => openTimePicker(key, "apertura", horario.apertura)} style={{ width: "48%", padding: 10, borderRadius: 8, borderWidth: 1, borderColor: "#7BB3CD", backgroundColor: "#EFF9FB" }}>
+                  <Text style={{ fontWeight: "600" }}>Apertura</Text>
+                  <Text style={{ marginTop: 6, fontSize: 16 }}>{horario.apertura}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  className="flex-row items-center justify-between border rounded-lg px-4 py-3 bg-orange-50 w-[48%]"
-                  style={{ borderColor: "#FD721D" }}
-                  onPress={() => openTimePicker(key, "cierre", horario.cierre)}
-                >
-                  <View className="flex-row items-center">
-                    <MaterialIcons name="access-time" size={20} color="#FD721D" />
-                    <Text className="ml-2 font-medium">Cierre</Text>
-                  </View>
-                  <Text className="font-bold text-lg">{horario.cierre}</Text>
+                <TouchableOpacity onPress={() => openTimePicker(key, "cierre", horario.cierre)} style={{ width: "48%", padding: 10, borderRadius: 8, borderWidth: 1, borderColor: "#FD721D", backgroundColor: "#FFF7ED" }}>
+                  <Text style={{ fontWeight: "600" }}>Cierre</Text>
+                  <Text style={{ marginTop: 6, fontSize: 16 }}>{horario.cierre}</Text>
                 </TouchableOpacity>
               </View>
-            )}
-
-            {!horario.abierto && (
-              <View className="bg-gray-100 rounded-lg py-3 px-4">
-                <Text className="text-gray-500 text-center italic">
-                  Cerrado todo el día
-                </Text>
-              </View>
+            ) : (
+              <Text style={{ textAlign: "center", color: "#6b7280" }}>Cerrado todo el día</Text>
             )}
           </View>
         );
       })}
 
-      {/* Resumen de horarios */}
-      <View className="bg-white rounded-lg p-4 mt-4 border border-gray-200">
-        <Text className="text-lg font-semibold mb-2 text-center" style={{ color: "#B2A83F" }}>
-          Resumen de Horarios
-        </Text>
+      {/* Resumen */}
+      <View style={{ backgroundColor: "white", borderRadius: 10, padding: 12, marginTop: 8 }}>
+        <Text style={{ fontSize: 16, fontWeight: "700", textAlign: "center", color: "#B2A83F", marginBottom: 8 }}>Resumen de Horarios</Text>
         {diasSemana.map(({ key, label }) => {
           const horario = form.horarios[key as keyof typeof form.horarios];
           return (
-            <View key={key} className="flex-row justify-between py-1">
-              <Text className="capitalize font-medium">{label}:</Text>
-              <Text className={horario.abierto ? "text-green-600" : "text-red-600"}>
-                {horario.abierto ? `${horario.apertura} - ${horario.cierre}` : 'Cerrado'}
+            <View key={key} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 2 }}>
+              <Text style={{ textTransform: "capitalize" }}>{label}:</Text>
+              <Text style={{ color: horario.abierto ? "#16a34a" : "#dc2626" }}>
+                {horario.abierto ? `${horario.apertura} - ${horario.cierre}` : "Cerrado"}
               </Text>
             </View>
           );
         })}
       </View>
 
-      <View className="flex-row justify-between mt-8 mb-10">
-        <Button
-          mode="outlined"
-          onPress={() => setPagina(1)}
-          style={{ 
-            borderColor: "#FD721D", 
-            borderRadius: 50,
-            width: '48%'
-          }}
-          labelStyle={{ color: "#FD721D", fontWeight: "bold" }}
-        >
+      <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 16, marginBottom: Math.max(6, insets.bottom) }}>
+        <Button mode="outlined" onPress={() => setPagina(1)} style={{ borderColor: "#FD721D", width: "48%" }} labelStyle={{ color: "#FD721D" }}>
           ← Atrás
         </Button>
 
-        <Button
-          mode="contained"
-          onPress={handleSubmit}
-          style={{ 
-            backgroundColor: "#7BB3CD", 
-            borderRadius: 50,
-            width: '48%'
-          }}
-          labelStyle={{ fontWeight: "bold" }}
-        >
+        <Button mode="contained" onPress={handleSubmit} style={{ backgroundColor: "#7BB3CD", width: "48%" }}>
           ✅ Enviar
         </Button>
       </View>
     </ScrollView>
   );
 
-  return <View className="flex-1">{pagina === 1 ? renderPagina1() : renderPagina2()}</View>;
+  return <View style={{ flex: 1 }}>{pagina === 1 ? renderPagina1() : renderPagina2()}</View>;
 }

@@ -1,512 +1,318 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert, Modal, Dimensions } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Feather, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
-
-// Hooks y tipos
-import useParqueoDetalle, { formatHour } from '../../hooks/useParqueoDetalle';
+// app/parqueo-detalle/[id].tsx
+import React, { useState, useMemo, useCallback } from "react";
 import {
-    RatingStarsProps,
-    GaleriaImagenesProps,
-    ServiciosAdicionalesProps,
-    DetalleCapacidadesProps,
-    ALL_DAYS
-} from '../../types/detalle';
+  View,
+  Text,
+  ScrollView,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+  Modal,
+} from "react-native";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import { Feather, FontAwesome5 } from "@expo/vector-icons";
+import ReviewsModal from "@/components/Comment/Reviews";
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+/* ============================
+   INTERFACES
+   (mantengo las mínimas necesarias)
+============================ */
+interface Calificacion { puntuacion: string; comentario: string; }
+interface Capacidad { id: number; cantidad: number; tipoVehiculoId: number; tipoVehiculo: { nombre: string }; }
+interface Servicio { estado: boolean; servicio: { nombre: string }; }
+interface Horario { diaSemana: string; horaAbrir: string; horaCerrar: string; esCerrado: boolean; }
+interface Tarifa { tipoVehiculoId: number; precioHora: string; descripcion: string; }
+interface Foto { url: string }
+interface ParqueoDetalleAPI {
+  id: number;
+  nombre: string;
+  direccion: string;
+  tipoLugar: string;
+  latitud: number;
+  longitud: number;
+  capacidades: Capacidad[];
+  tarifas: Tarifa[];
+  horarios: Horario[];
+  calificaciones: Calificacion[];
+  servicios: Servicio[];
+  fotos: Foto[];
+  descripcion?: string;
+  plazas: any[];
+}
 
-// --- COMPONENTES AUXILIARES ACTUALIZADOS ---
+const ALL_DAYS = ["lunes","martes","miercoles","jueves","viernes","sabado","domingo"];
 
-const RatingStars = ({ rating }: RatingStarsProps) => {
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 >= 0.5;
-    const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
-    
-    return (
-        <View className="flex-row">
-            <Text className="text-[#F2BD2B] text-lg">
-                {'★'.repeat(fullStars)}
-                {hasHalfStar ? '½' : ''}
-                {'☆'.repeat(emptyStars)}
-            </Text>
-        </View>
-    );
+/* ============================
+   HELPERS
+============================ */
+const formatHour = (t:string)=>{
+  if(!t) return "N/A";
+  const [h,m]=t.split(":");
+  const d=new Date();
+  d.setHours(+h || 0, +m || 0);
+  return d.toLocaleTimeString("es-BO",{hour:"2-digit",minute:"2-digit",hour12:true});
 };
 
-// ✅ NUEVO: Modal para visualización de imágenes
-const ImageModal = ({ 
-    visible, 
-    images, 
-    currentIndex, 
-    onClose, 
-    onNext, 
-    onPrev 
-}: {
-    visible: boolean;
-    images: string[];
-    currentIndex: number;
-    onClose: () => void;
-    onNext: () => void;
-    onPrev: () => void;
-}) => {
-    if (!visible || !images.length) return null;
-
-    return (
-        <Modal
-            visible={visible}
-            transparent={true}
-            animationType="fade"
-            statusBarTranslucent={true}
-        >
-            <View className="flex-1 bg-black/95 justify-center items-center">
-                {/* Botón cerrar */}
-                <TouchableOpacity 
-                    onPress={onClose}
-                    className="absolute top-16 right-6 z-20 bg-black/50 p-3 rounded-full"
-                >
-                    <Feather name="x" size={24} color="white" />
-                </TouchableOpacity>
-
-                {/* Contador de imágenes */}
-                <View className="absolute top-16 left-6 z-20 bg-black/50 px-3 py-1 rounded-full">
-                    <Text className="text-white text-sm font-medium">
-                        {currentIndex + 1} / {images.length}
-                    </Text>
-                </View>
-
-                {/* Imagen principal */}
-                <View className="w-full h-3/4 justify-center items-center">
-                    <Image
-                        source={{ uri: images[currentIndex] }}
-                        className="w-full h-full"
-                        resizeMode="contain"
-                    />
-                </View>
-
-                {/* Botones de navegación */}
-                {images.length > 1 && (
-                    <View className="absolute bottom-8 flex-row justify-between w-full px-8">
-                        {/* Botón anterior */}
-                        <TouchableOpacity 
-                            onPress={onPrev}
-                            className="bg-black/50 p-4 rounded-full"
-                            disabled={currentIndex === 0}
-                        >
-                            <Feather 
-                                name="chevron-left" 
-                                size={24} 
-                                color={currentIndex === 0 ? '#666' : 'white'} 
-                            />
-                        </TouchableOpacity>
-
-                        {/* Botón siguiente */}
-                        <TouchableOpacity 
-                            onPress={onNext}
-                            className="bg-black/50 p-4 rounded-full"
-                            disabled={currentIndex === images.length - 1}
-                        >
-                            <Feather 
-                                name="chevron-right" 
-                                size={24} 
-                                color={currentIndex === images.length - 1 ? '#666' : 'white'} 
-                            />
-                        </TouchableOpacity>
-                    </View>
-                )}
-
-                {/* Indicadores de posición (dots) */}
-                {images.length > 1 && (
-                    <View className="absolute bottom-4 flex-row space-x-2">
-                        {images.map((_, index) => (
-                            <View
-                                key={index}
-                                className={`w-2 h-2 rounded-full ${
-                                    index === currentIndex ? 'bg-white' : 'bg-gray-500'
-                                }`}
-                            />
-                        ))}
-                    </View>
-                )}
-            </View>
-        </Modal>
-    );
+const RatingStars = ({ rating }: { rating:number }) => {
+  const full=Math.floor(rating);
+  const half=rating%1>=0.5;
+  const empty=5-full-(half?1:0);
+  return (
+    <Text style={{ color: '#F2BD2B', fontSize: 18 }}>
+      {"★".repeat(full)}{half?"½":""}{"☆".repeat(empty)}
+    </Text>
+  );
 };
 
-// ✅ ACTUALIZADO: Galería de imágenes con funcionalidad de zoom
-const GaleriaImagenes = ({ imagenes }: GaleriaImagenesProps) => {
-    const [modalVisible, setModalVisible] = useState(false);
-    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+/* ============================
+   NORMALIZACIÓN DE DATOS
+============================ */
+const useParqueoStats = (d: ParqueoDetalleAPI | null) => useMemo(()=>{
+  if(!d?.calificaciones?.length) return { average:0, count:0 };
+  const sum = d.calificaciones.reduce((a,c) => a + (parseFloat(c.puntuacion as any) || 0), 0);
+  return { average: +(sum/d.calificaciones.length).toFixed(1), count: d.calificaciones.length };
+},[d]);
 
-    if (!imagenes || imagenes.length === 0) return null;
+const useParqueoData = (d:ParqueoDetalleAPI|null)=>useMemo(()=>{
+  if(!d) return {
+    imagenes:[] as string[],
+    img:'https://via.placeholder.com/400x250?text=No+Image',
+    tarifaAuto:0, tarifaMoto:0,
+    autoCap:0, motoCap:0,
+    autoDisp:0, motoDisp:0,
+    servicios: [] as Servicio[]
+  };
 
-    const openImage = (index: number) => {
-        setCurrentImageIndex(index);
-        setModalVisible(true);
-    };
+  const imagenes = d.fotos?.length ? d.fotos.map(f=>f.url) : ['https://via.placeholder.com/400x250?text=No+Image'];
+  const img = imagenes[0];
 
-    const closeModal = () => {
-        setModalVisible(false);
-    };
+  const tarifaAutoObj = d.tarifas?.find(t=>t.tipoVehiculoId===1) ?? d.tarifas?.find(t => (t.descripcion || '').toLowerCase().includes('auto'));
+  const tarifaMotoObj = d.tarifas?.find(t=>t.tipoVehiculoId===2) ?? d.tarifas?.find(t => (t.descripcion || '').toLowerCase().includes('moto'));
 
-    const nextImage = () => {
-        setCurrentImageIndex(prev => 
-            prev === imagenes.length - 1 ? 0 : prev + 1
-        );
-    };
+  const capAutoObj = d.capacidades?.find(c=>c.tipoVehiculoId===1);
+  const capMotoObj = d.capacidades?.find(c=>c.tipoVehiculoId===2);
 
-    const prevImage = () => {
-        setCurrentImageIndex(prev => 
-            prev === 0 ? imagenes.length - 1 : prev - 1
-        );
-    };
+  const autoDisp = Array.isArray(d.plazas) ? d.plazas.filter((p:any)=>p.tipoVehiculoId===1 && (!p.estado || p.estado === 'DISPONIBLE' || p.estado === 'libre')).length : (capAutoObj?.cantidad || 0);
+  const motoDisp = Array.isArray(d.plazas) ? d.plazas.filter((p:any)=>p.tipoVehiculoId===2 && (!p.estado || p.estado === 'DISPONIBLE' || p.estado === 'libre')).length : (capMotoObj?.cantidad || 0);
 
-    return (
-        <View className="mt-4">
-            <Text className="text-xl font-bold text-black mb-3">Galería de Imágenes</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
-                {imagenes.map((url, index) => (
-                    <TouchableOpacity
-                        key={index}
-                        onPress={() => openImage(index)}
-                        activeOpacity={0.7}
-                        className="mr-2 relative"
-                    >
-                        <Image
-                            source={{ uri: url }}
-                            className="w-32 h-24 rounded-lg"
-                            resizeMode="cover"
-                        />
-                        {/* Icono de zoom en miniatura */}
-                        <View className="absolute top-1 right-1 bg-black/50 p-1 rounded">
-                            <Feather name="zoom-in" size={12} color="white" />
-                        </View>
-                    </TouchableOpacity>
-                ))}
-            </ScrollView>
+  return {
+    imagenes,
+    img,
+    tarifaAuto: tarifaAutoObj ? Number(tarifaAutoObj.precioHora) || 0 : 0,
+    tarifaMoto: tarifaMotoObj ? Number(tarifaMotoObj.precioHora) || 0 : 0,
+    autoCap: capAutoObj?.cantidad || 0,
+    motoCap: capMotoObj?.cantidad || 0,
+    autoDisp,
+    motoDisp,
+    servicios: d.servicios?.filter(s=>s.estado) || []
+  };
+},[d]);
 
-            {/* Modal de imagen ampliada */}
-            <ImageModal
-                visible={modalVisible}
-                images={imagenes}
-                currentIndex={currentImageIndex}
-                onClose={closeModal}
-                onNext={nextImage}
-                onPrev={prevImage}
-            />
-        </View>
-    );
-};
-
-const ServiciosAdicionales = ({ servicios }: ServiciosAdicionalesProps) => {
-    if (!servicios || servicios.length === 0) {
-        return (
-            <View className="mt-4">
-                <Text className="text-xl font-bold text-black mb-3">Servicios Adicionales</Text>
-                <Text className="text-sm text-black">No hay servicios adicionales disponibles</Text>
-            </View>
-        );
-    }
-
-    return (
-        <View className="mt-4">
-            <Text className="text-xl font-bold text-black mb-3">Servicios Adicionales</Text>
-            <View className="flex-row flex-wrap gap-2">
-                {servicios.map((servicio, index) => (
-                    <View key={index} className="flex-row items-center bg-[#7BB5CB] rounded-full px-3 py-2">
-                        <Feather name="check" size={14} color="#F6EEE4" />
-                        <Text className="text-sm text-white ml-1">
-                            {typeof servicio === 'string' ? servicio : servicio.nombre || servicio.servicio?.nombre}
-                        </Text>
-                    </View>
-                ))}
-            </View>
-        </View>
-    );
-};
-
-const DetalleCapacidades = ({ 
-    capacidadAutos, 
-    capacidadMotos,
-    disponibilidadAutos,
-    disponibilidadMotos,
-    tarifaAuto,
-    tarifaMoto
-}: DetalleCapacidadesProps) => {
-    return (
-        <View className="mt-4">
-            <Text className="text-xl font-bold text-black mb-3">Detalle de Capacidades</Text>
-            
-            {/* Capacidad para Autos */}
-            <View className="mb-4">
-                <Text className="text-lg font-semibold text-black mb-2">
-                    Autos ({disponibilidadAutos} / {capacidadAutos} espacios)
-                </Text>
-                <View className="flex-row items-center bg-[#7BB5CB] p-3 rounded-lg">
-                    <FontAwesome5 name="car" size={20} color="#F6EEE4" />
-                    <View className="ml-3">
-                        <Text className="text-sm text-white font-semibold">
-                            Tarifa: {tarifaAuto} Bs/h
-                        </Text>
-                        <Text className="text-xs text-white mt-1">
-                            {disponibilidadAutos} de {capacidadAutos} espacios disponibles
-                        </Text>
-                    </View>
-                </View>
-            </View>
-
-            {/* Capacidad para Motos */}
-            <View>
-                <Text className="text-lg font-semibold text-black mb-2">
-                    Motos ({disponibilidadMotos} / {capacidadMotos} espacios)
-                </Text>
-                <View className="flex-row items-center bg-[#FD721D] p-3 rounded-lg">
-                    <FontAwesome5 name="motorcycle" size={20} color="#F6EEE4" />
-                    <View className="ml-3">
-                        <Text className="text-sm text-white font-semibold">
-                            Tarifa: {tarifaMoto} Bs/h
-                        </Text>
-                        <Text className="text-xs text-white mt-1">
-                            {disponibilidadMotos} de {capacidadMotos} espacios disponibles
-                        </Text>
-                    </View>
-                </View>
-            </View>
-        </View>
-    );
-};
-
-// --- COMPONENTE PRINCIPAL CORREGIDO ---
+/* ============================
+   COMPONENTE PRINCIPAL
+============================ */
 export default function DetalleParqueoScreen() {
-    const router = useRouter();
-    const {
-        data,
-        isLoading,
-        error,
-        stats,
-        processedData,
-        handleNavigateToReserva,
-        refetch
-    } = useParqueoDetalle();
+  const { id } = useLocalSearchParams();
+  const router = useRouter();
+  const parqueoId = Array.isArray(id) ? id[0] : id;
 
-    const [mainImageModalVisible, setMainImageModalVisible] = useState(false);
+  const [data,setData]=useState<ParqueoDetalleAPI|null>(null);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState<string|null>(null);
+  const [modalReviews,setModalReviews]=useState(false);
+  const [modalImage,setModalImage]=useState(false);
 
-    const handleReservaPress = () => {
-        if (!data?.id) {
-            Alert.alert('Error', 'No se pudo obtener la información del parqueo');
-            return;
-        }
+  const { average, count } = useParqueoStats(data);
+  const {
+    imagenes, img, tarifaAuto, tarifaMoto,
+    autoCap, motoCap, autoDisp, motoDisp, servicios
+  } = useParqueoData(data);
 
-        handleNavigateToReserva({
-            parqueoId: data.id.toString(),
-            parqueoNombre: data.nombre || 'Parqueo'
-        });
+  /* FETCH de detalles (usa el endpoint que tenías) */
+  useFocusEffect(useCallback(()=>{
+    if(!parqueoId){ setError("ID del parqueo no encontrado en la URL."); setLoading(false); return; }
+
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const url = `https://parkado-backend.vercel.app/api/parqueos/details`;
+        const response = await fetch(url);
+        if(!response.ok) throw new Error(`Error ${response.status}: No se pudo cargar los datos.`);
+        const json: ParqueoDetalleAPI[] = await response.json();
+        const idBuscado = parseInt(parqueoId as string, 10);
+        const found = json.find(p => p.id === idBuscado);
+        if(!found) throw new Error(`No se encontró el parqueo con ID: ${idBuscado}`);
+        setData(found);
+      } catch (e:any) {
+        console.error("❌ ERROR DURANTE EL FETCH:", e);
+        setError(e.message || "Error de conexión. Verifica tu internet.");
+      } finally {
+        setLoading(false);
+      }
     };
 
-    const openMainImageModal = () => {
-        if (processedData?.imagenPrincipal) {
-            setMainImageModalVisible(true);
-        }
-    };
+    fetchData();
+  },[parqueoId]));
 
-    // --- Render condicional ---
-    if (isLoading) {
-        return (
-            <View className="flex-1 items-center justify-center bg-[#F6EEE4]">
-                <ActivityIndicator size="large" color="#7BB5CB" />
-                <Text className="mt-4 text-base text-black">Cargando información del parqueo...</Text>
-            </View>
-        );
-    }
+  /* Navegar a reserva */
+  const handleNavigateToReserva = () => {
+    if(!data){ Alert.alert("Error","Datos del parqueo no disponibles."); return; }
+    router.push({
+      pathname: '/reserva' as any,
+      params: {
+        parqueoId: data.id.toString(),
+        parqueoNombre: data.nombre || 'Parqueo',
+        tarifaAuto: tarifaAuto.toString(),
+        tarifaMoto: tarifaMoto.toString(),
+        capacidadAutos: autoCap.toString(),
+        capacidadMotos: motoCap.toString(),
+        disponibilidadAutos: autoDisp.toString(),
+        disponibilidadMotos: motoDisp.toString(),
+        parqueoLat: data.latitud?.toString() || '-17.3936',
+        parqueoLng: data.longitud?.toString() || '-66.1569',
+      }
+    });
+  };
 
-    if (error || !data) {
-        return (
-            <View className="flex-1 items-center justify-center bg-[#F6EEE4] p-8">
-                <Text className="text-xl font-bold text-[#FD721D] text-center mb-4">
-                    {error || "Datos no disponibles"}
-                </Text>
-                <TouchableOpacity 
-                    onPress={() => router.back()} 
-                    className="bg-[#FD721D] px-6 py-3 rounded-lg"
-                >
-                    <Text className="text-white font-semibold">Volver</Text>
+  /* Renders */
+  if(loading) return (
+    <View style={{ flex:1, alignItems:'center', justifyContent:'center', backgroundColor:'#F6EEE4' }}>
+      <ActivityIndicator size="large" color="#7BB5CB" />
+      <Text style={{ marginTop: 12, color:'#000' }}>Cargando información del parqueo...</Text>
+    </View>
+  );
+
+  if(error || !data) return (
+    <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:16, backgroundColor:'#F6EEE4' }}>
+      <Text style={{ color:'#FD721D', fontWeight:'700', fontSize:18, textAlign:'center', marginBottom:12 }}>{error || "Datos no disponibles"}</Text>
+      <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor:'#FD721D', paddingHorizontal:20, paddingVertical:12, borderRadius:8 }}>
+        <Text style={{ color:'white', fontWeight:'700' }}>Volver</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  return (
+    <View style={{ flex:1, backgroundColor:'#F6EEE4' }}>
+      {/* Imagen principal clickeable */}
+      <TouchableOpacity onPress={() => setModalImage(true)} activeOpacity={0.9}>
+        <Image source={{ uri: img }} style={{ width:'100%', height: 256 }} resizeMode="cover" />
+      </TouchableOpacity>
+
+      <ScrollView style={{ flex:1, padding:16 }} showsVerticalScrollIndicator={false}>
+        {/* Título */}
+        <Text style={{ fontSize:28, fontWeight:'700', marginBottom:6 }}>{data.nombre}</Text>
+
+        {/* Dirección */}
+        <View style={{ flexDirection:'row', alignItems:'center', marginBottom:8 }}>
+          <Feather name="map-pin" size={16} color="#7BB5CB" />
+          <Text style={{ marginLeft:8, color:'#000' }}>{data.direccion} {data.tipoLugar ? `(${data.tipoLugar})` : ''}</Text>
+        </View>
+
+        {/* Rating */}
+        <View style={{ flexDirection:'row', alignItems:'center', marginBottom:12 }}>
+          <Text style={{ fontSize:20, fontWeight:'700', marginRight:8 }}>{(average || 0).toFixed(1)}</Text>
+          <RatingStars rating={average || 0} />
+          <Text style={{ marginLeft:8, color:'#000' }}>({count} {count === 1 ? 'opinión' : 'opiniones'})</Text>
+        </View>
+
+        {/* Botones: Reservar + Ver Reseñas */}
+        <View style={{ flexDirection:'row', justifyContent:'space-between', marginBottom:16 }}>
+          <TouchableOpacity
+            onPress={handleNavigateToReserva}
+            style={{ width:'48%', backgroundColor:'#FD721D', paddingVertical:12, borderRadius:10, alignItems:'center' }}
+          >
+            <Text style={{ color:'white', fontWeight:'700' }}>RESERVAR</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setModalReviews(true)}
+            style={{ width:'48%', backgroundColor:'#7BB5CB', paddingVertical:12, borderRadius:10, alignItems:'center' }}
+          >
+            <Text style={{ color:'white', fontWeight:'700' }}>VER RESEÑAS</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Galería */}
+        {imagenes && imagenes.length > 1 && (
+          <View style={{ marginBottom: 12 }}>
+            <Text style={{ fontSize:18, fontWeight:'700', marginBottom:8 }}>Galería</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {imagenes.map((u, i) => (
+                <TouchableOpacity key={i} onPress={() => setModalImage(true)}>
+                  <Image source={{ uri: u }} style={{ width:128, height:80, borderRadius:8, marginRight:8 }} resizeMode="cover" />
                 </TouchableOpacity>
-                <TouchableOpacity 
-                    onPress={refetch}
-                    className="bg-[#7BB5CB] px-6 py-3 rounded-lg mt-3"
-                >
-                    <Text className="text-white font-semibold">Reintentar</Text>
-                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Capacidades y tarifas */}
+        <Text style={{ fontSize:18, fontWeight:'700', marginTop:8, marginBottom:8 }}>Capacidades y Tarifas</Text>
+        <View style={{ flexDirection:'row', justifyContent:'space-between', marginBottom:12 }}>
+          <View style={{ width:'48%', backgroundColor:'#7BB5CB', padding:12, borderRadius:8, flexDirection:'row', alignItems:'center' }}>
+            <FontAwesome5 name="car" size={24} color="#F6EEE4" />
+            <View style={{ marginLeft:12 }}>
+              <Text style={{ color:'white', fontWeight:'700' }}>{autoDisp}/{autoCap} Autos</Text>
+              <Text style={{ color:'white' }}>{tarifaAuto} Bs/h</Text>
             </View>
-        );
-    }
+          </View>
 
-    // ✅ CORREGIDO: Usar valores directamente desde processedData (ya deberían ser números)
-    const {
-        imagenPrincipal = 'https://via.placeholder.com/300x200?text=Imagen+No+Disponible',
-        imagenes = [],
-        serviciosActivos = [],
-        capacidadAutos = 0,
-        capacidadMotos = 0,
-        disponibilidadAutos = 0,
-        disponibilidadMotos = 0,
-        tarifaAuto = 0, // ✅ Ya es número según tus tipos
-        tarifaMoto = 0  // ✅ Ya es número según tus tipos
-    } = processedData || {};
-
-    const horarios = data.horarios || [];
-    const allImages = [imagenPrincipal, ...imagenes.filter(img => img !== imagenPrincipal)];
-
-    return (
-        <ScrollView className="flex-1 bg-[#F6EEE4]" showsVerticalScrollIndicator={false}>
-            {/* Contenedor de Imagen Principal */}
-            <View className="w-full h-64 overflow-hidden relative">
-                <TouchableOpacity 
-                    onPress={openMainImageModal}
-                    activeOpacity={0.9}
-                    disabled={!imagenPrincipal}
-                >
-                    <Image
-                        source={{ uri: imagenPrincipal }}
-                        className="w-full h-full"
-                        resizeMode="cover"
-                        defaultSource={{ uri: 'https://via.placeholder.com/300x200?text=Imagen+No+Disponible' }}
-                    />
-                    <View className="absolute bottom-3 right-3 bg-black/50 p-2 rounded-full">
-                        <Feather name="zoom-in" size={20} color="white" />
-                    </View>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                    onPress={() => router.back()} 
-                    className="absolute top-12 left-4 bg-black/50 p-2 rounded-full"
-                >
-                    <Feather name="arrow-left" size={24} color="white" />
-                </TouchableOpacity>
+          <View style={{ width:'48%', backgroundColor:'#FD721D', padding:12, borderRadius:8, flexDirection:'row', alignItems:'center' }}>
+            <FontAwesome5 name="motorcycle" size={24} color="#F6EEE4" />
+            <View style={{ marginLeft:12 }}>
+              <Text style={{ color:'white', fontWeight:'700' }}>{motoDisp}/{motoCap} Motos</Text>
+              <Text style={{ color:'white' }}>{tarifaMoto} Bs/h</Text>
             </View>
+          </View>
+        </View>
 
-            <ImageModal
-                visible={mainImageModalVisible}
-                images={allImages}
-                currentIndex={0}
-                onClose={() => setMainImageModalVisible(false)}
-                onNext={() => {}}
-                onPrev={() => {}}
-            />
-
-            {/* Contenido Principal */}
-            <View className="p-4">
-                {/* Encabezado */}
-                <Text className="text-3xl font-bold text-black mb-1">
-                    {data.nombre || 'Parqueo Sin Nombre'}
-                </Text>
-                
-                {/* Dirección */}
-                <View className="flex-row items-center mb-1">
-                    <Feather name="map-pin" size={16} color="#7BB5CB" />
-                    <Text className="text-sm text-black ml-2 flex-1">
-                        {data.direccion || 'Dirección no disponible'} 
-                        {data.tipoLugar && ` (${data.tipoLugar})`}
-                    </Text>
-                </View>
-                
-                {/* Rating */}
-                <View className="flex-row items-center mb-4">
-                    <Text className="text-xl font-bold text-black mr-2">
-                        {stats?.averageRating?.toFixed(1) || '0.0'}
-                    </Text>
-                    <RatingStars rating={stats?.averageRating || 0} />
-                    <Text className="text-xs text-black ml-2">
-                        ({stats?.reviewCount || 0} {stats?.reviewCount === 1 ? 'opinión' : 'opiniones'})
-                    </Text>
-                </View>
-
-                {/* Fila de Acciones */}
-                <View className="flex-row justify-between border-b border-gray-300 pb-4 mb-4">
-                    <TouchableOpacity
-                        className="items-center justify-center w-2/5 bg-[#FD721D] rounded-lg py-2 shadow-lg"
-                        onPress={handleReservaPress}
-                        disabled={!data.id}
-                    >
-                        <Text className="text-sm font-bold text-white">RESERVAR</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Galería de Imágenes */}
-                <GaleriaImagenes imagenes={imagenes} />
-
-                {/* Capacidades y Tarifas */}
-                <Text className="text-xl font-bold text-black mt-4 mb-3">Capacidades y Tarifas</Text>
-                <View className="flex-row flex-wrap justify-between">
-                    {/* Auto */}
-                    <View className="w-[48%] bg-[#7BB5CB] p-3 rounded-lg mb-2 flex-row items-center shadow-sm">
-                        <FontAwesome5 name="car" size={24} color="#F6EEE4" />
-                        <View className="ml-3">
-                            <Text className="text-xs font-semibold text-white">Auto</Text>
-                            <Text className="text-xl font-bold text-white">
-                                {disponibilidadAutos} / {capacidadAutos}
-                            </Text>
-                            {/* ✅ Usar tarifaAuto directamente (ya es número) */}
-                            <Text className="text-xs text-white">{tarifaAuto.toFixed(2)} Bs/h</Text>
-                        </View>
-                    </View>
-                    
-                    {/* Moto */}
-                    <View className="w-[48%] bg-[#FD721D] p-3 rounded-lg mb-2 flex-row items-center shadow-sm">
-                        <FontAwesome5 name="motorcycle" size={24} color="#F6EEE4" />
-                        <View className="ml-3">
-                            <Text className="text-xs font-semibold text-white">Moto</Text>
-                            <Text className="text-xl font-bold text-white">
-                                {disponibilidadMotos} / {capacidadMotos}
-                            </Text>
-                            {/* ✅ Usar tarifaMoto directamente (ya es número) */}
-                            <Text className="text-xs text-white">{tarifaMoto.toFixed(2)} Bs/h</Text>
-                        </View>
-                    </View>
-                </View>
-
-                {/* Servicios Adicionales */}
-                <ServiciosAdicionales servicios={serviciosActivos} />
-
-                {/* Horarios */}
-                <Text className="text-xl font-bold text-black mt-4 mb-3">Horarios de Atención</Text>
-                {ALL_DAYS.map((day, index) => {
-                    const horarioDia = horarios.find(h => 
-                        h.diaSemana?.toLowerCase() === day.toLowerCase()
-                    );
-                    const esCerrado = !horarioDia || horarioDia.esCerrado;
-                    const horarioTexto = (horarioDia && !horarioDia.esCerrado)
-                        ? `${formatHour(horarioDia.horaAbrir)} - ${formatHour(horarioDia.horaCerrar)}`
-                        : 'Cerrado';
-                    return (
-                        <View key={index} className="flex-row items-center mb-2">
-                            <Feather 
-                                name="calendar" 
-                                size={16} 
-                                color={esCerrado ? '#9CA3AF' : '#7BB5CB'} 
-                            />
-                            <Text className="text-sm text-black ml-3 font-semibold w-24">
-                                {day.charAt(0).toUpperCase() + day.slice(1)}:
-                            </Text>
-                            <Text className={`text-sm ml-2 ${esCerrado ? 'text-gray-500' : 'text-black'}`}>
-                                {horarioTexto}
-                            </Text>
-                        </View>
-                    );
-                })}
-
-                {/* ✅ Pasar tarifas directamente (ya son números) */}
-                <DetalleCapacidades 
-                    capacidadAutos={capacidadAutos}
-                    capacidadMotos={capacidadMotos}
-                    disponibilidadAutos={disponibilidadAutos}
-                    disponibilidadMotos={disponibilidadMotos}
-                    tarifaAuto={tarifaAuto}
-                    tarifaMoto={tarifaMoto}
-                />
-
-                {/* Espacio al final para mejor scroll */}
-                <View className="h-8" />
+        {/* Horarios */}
+        <Text style={{ fontSize:18, fontWeight:'700', marginBottom:8 }}>Horarios de Atención</Text>
+        {ALL_DAYS.map((day) => {
+          const horarioDia = data.horarios?.find(h => h.diaSemana.toLowerCase() === day);
+          const esCerrado = !horarioDia || horarioDia.esCerrado;
+          const horarioTexto = (horarioDia && !horarioDia.esCerrado)
+            ? `${formatHour(horarioDia.horaAbrir)} - ${formatHour(horarioDia.horaCerrar)}`
+            : 'Cerrado';
+          return (
+            <View key={day} style={{ flexDirection:'row', alignItems:'center', marginBottom:6 }}>
+              <Feather name="calendar" size={16} color={esCerrado ? '#9CA3AF' : '#7BB5CB'} />
+              <Text style={{ marginLeft:8, width:100, fontWeight:'700' }}>{day.charAt(0).toUpperCase() + day.slice(1)}</Text>
+              <Text style={{ marginLeft:8, color: esCerrado ? '#9CA3AF' : '#000' }}>{horarioTexto}</Text>
             </View>
-        </ScrollView>
-    );
+          );
+        })}
+
+        {/* Servicios */}
+        <Text style={{ fontSize:18, fontWeight:'700', marginTop:12, marginBottom:8 }}>Servicios</Text>
+        <View style={{ flexDirection:'row', flexWrap:'wrap' }}>
+          {servicios.map((s, i) => (
+            <View key={i} style={{ backgroundColor:'#7BB5CB', paddingHorizontal:10, paddingVertical:6, borderRadius:999, marginRight:8, marginBottom:8 }}>
+              <Text style={{ color:'white' }}>{s.servicio.nombre}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={{ height: 32 }} />
+      </ScrollView>
+
+      {/* Reviews Modal */}
+      <ReviewsModal
+        visible={modalReviews}
+        onClose={() => setModalReviews(false)}
+        parqueoId={parseInt(parqueoId || '0')}
+      />
+
+      {/* Imagen fullscreen modal */}
+      <Modal visible={modalImage} transparent animationType="fade">
+        <TouchableOpacity
+          style={{ flex:1, backgroundColor:'rgba(0,0,0,0.95)', justifyContent:'center', alignItems:'center' }}
+          onPress={() => setModalImage(false)}
+        >
+          <Image source={{ uri: img }} style={{ width: '90%', height: '75%' }} resizeMode="contain" />
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
 }

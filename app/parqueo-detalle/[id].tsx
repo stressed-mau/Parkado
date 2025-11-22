@@ -316,3 +316,4 @@ export default function DetalleParqueoScreen() {
     </View>
   );
 }
+

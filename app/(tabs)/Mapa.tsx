@@ -70,6 +70,7 @@ const Mapa: React.FC = () => {
     handleClearSelection,
     cerrarSoloPopup,
     handleShowDirectionsFromPopup,
+    fetchRoute,  // Necesario para calcular la ruta
   } = useMapa();
 
   // Hook de búsqueda
@@ -100,6 +101,38 @@ const Mapa: React.FC = () => {
       setParqueosParaVista(convertidos);
     }
   }, [parqueosUseMapa, parqueosBusqueda, modoBusqueda]);
+
+  // Efecto para manejar el destino y calcular la ruta cuando los params de la URL cambian
+  useEffect(() => {
+    const hasDest = router.query?.destLat || router.query?.destLng;
+    if (!hasDest) return;
+
+    const destLat = router.query?.destLat ? Number(router.query?.destLat) : null;
+    const destLng = router.query?.destLng ? Number(router.query?.destLng) : null;
+    const destName = router.query?.destNombre ?? null;
+
+    if (!destLat || !destLng) {
+      console.warn('Params de destino inválidos:', router.query);
+      return;
+    }
+
+    const destCoords = { latitude: destLat, longitude: destLng };
+    setDestination(destCoords);
+    setRegion({
+      latitude: destLat,
+      longitude: destLng,
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
+    });
+
+    if (userLocation) {
+      fetchRoute(userLocation, destCoords, destName ?? undefined);
+    }
+
+    // Limpiar params después de procesar
+    router.setParams({ destLat: undefined, destLng: undefined, destNombre: undefined });
+
+  }, [router.query?.destLat, router.query?.destLng, userLocation, fetchRoute]);
 
   // Control principal de búsqueda
   const handleBuscar = async (payload: string | any) => {
@@ -257,7 +290,6 @@ const Mapa: React.FC = () => {
 
   return (
     <View className="flex-1">
-
       {/* BUSCADOR */}
       <BuscadorMapa
         onBuscar={handleBuscar}
@@ -418,7 +450,6 @@ const Mapa: React.FC = () => {
           await handleBuscar(opciones);
         }}
       />
-
     </View>
   );
 };

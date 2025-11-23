@@ -2,9 +2,10 @@ import axios from 'axios';
 
 const BASE_URL = "https://parkado-backend.vercel.app/api";
 
-export const getTarifasYPlazas = async () => {
+// Obtener tarifas y plazas de un parqueo específico
+export const getTarifasYPlazas = async (parqueoId: number) => {
   try {
-    const response = await axios.get(`${BASE_URL}/parqueos/details/3/plazas-tarifas`);
+    const response = await axios.get(`${BASE_URL}/parqueos/details/${parqueoId}/plazas-tarifas`);
     return response.data;
   } catch (error) {
     console.error('Error al obtener tarifas y plazas:', error);
@@ -12,6 +13,7 @@ export const getTarifasYPlazas = async () => {
   }
 };
 
+// Obtener plazas con filtrado opcional por tipo de vehículo
 export const getPlazas = async (idParqueo: number, tipoVehiculoId?: number) => {
   let url = `${BASE_URL}/parqueos/filter-plazas/${idParqueo}`;
   if (tipoVehiculoId) url += `?tipoVehiculoId=${tipoVehiculoId}`;
@@ -20,6 +22,7 @@ export const getPlazas = async (idParqueo: number, tipoVehiculoId?: number) => {
   return res.json();
 };
 
+// Obtener reservas por parqueo
 export const getReservasPorParqueo = async (idParqueo: number) => {
   try {
     const response = await axios.get(`${BASE_URL}/reservas/parqueo/${idParqueo}`);
@@ -30,6 +33,7 @@ export const getReservasPorParqueo = async (idParqueo: number) => {
   }
 };
 
+// Crear una nueva reserva
 export const crearReserva = async (data: {
   fechaHoraIni: string;
   fechaHoraFin: string;
@@ -46,6 +50,7 @@ export const crearReserva = async (data: {
   }
 };
 
+// Obtener plazas disponibles
 export const getPlazasDisponibles = async (
   parqueoId: number,
   tipoVehiculoId: number

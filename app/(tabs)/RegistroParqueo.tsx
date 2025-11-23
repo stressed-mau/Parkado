@@ -15,12 +15,11 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import MapView, { MapPressEvent, Marker } from "react-native-maps";
 import { Button, Checkbox } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Logo from "../../assets/Logo";
 
 /**
  * RUTAS LOCALES A LOS PDF SUBIDOS (referencia)
@@ -113,9 +112,39 @@ export default function RegistroEstacionamiento() {
     }
   };
 
+  // Manejo de inputs con validaciones
   const handleInput = (key: string, value: string) => {
     let newValue = value;
-    if (key === "telefono") newValue = value.replace(/\D/g, "").slice(0, 8);
+
+    // Nombre: sin caracteres especiales, máximo 16 caracteres.
+    if (key === "nombre") {
+      // Permitir letras (incluye acentos y ñ), números y espacios.
+      // El flag u y \p{L} permiten letras Unicode.
+      const cleaned = newValue.replace(/[^\p{L}\p{N} ]/gu, ""); // elimina caracteres especiales
+      newValue = cleaned.slice(0, 16); // máximo 16 caracteres
+    }
+
+    // Teléfono: sólo dígitos y máximo 8 (ya existente)
+    if (key === "telefono") {
+      newValue = value.replace(/\D/g, "").slice(0, 8);
+    }
+
+    // Capacidades: sólo dígitos, máximo 2 caracteres (0-99)
+    if (key === "capacidadAutos" || key === "capacidadMotos") {
+      newValue = value.replace(/\D/g, "").slice(0, 2);
+    }
+
+    // Tarifas: sólo dígitos, máximo 2 caracteres (0-99)
+    // Si quieres permitir decimales, habría que cambiar esto. Por ahora: enteros.
+    if (
+      key === "tarifaAutos" ||
+      key === "tarifaMotos" ||
+      key === "tarifaAutosDia" ||
+      key === "tarifaMotosDia"
+    ) {
+      newValue = value.replace(/\D/g, "").slice(0, 2);
+    }
+
     setForm({ ...form, [key]: newValue });
   };
 
@@ -131,30 +160,15 @@ export default function RegistroEstacionamiento() {
 
   // Horarios picker - CORREGIDO para Android/iOS
   const handleTimeChange = (event: any, selectedDate?: Date) => {
-    // Debug opcional:
-    // console.log("DateTimePicker event:", event, "selectedDate:", selectedDate);
+    // En Android suele recibir event; en iOS selectedDate puede ser undefined si cancela
+    setShowPicker(false);
 
-    // Android: event.type === 'dismissed' o 'set'
-    if (Platform.OS === "android") {
-      if (event?.type === "dismissed") {
-        setShowPicker(false);
-        return;
-      }
-
-      // Puede venir la fecha en selectedDate o en event.nativeEvent.timestamp
-      const timestamp =
-        selectedDate ??
-        (event?.nativeEvent?.timestamp ? new Date(event.nativeEvent.timestamp) : undefined);
-
-      setShowPicker(false); // cerramos el picker en Android después del evento
-
-      if (!timestamp || !pickerInfo) return;
-
-      const hours = timestamp.getHours().toString().padStart(2, "0");
-      const minutes = timestamp.getMinutes().toString().padStart(2, "0");
+    if (selectedDate && pickerInfo) {
+      const { dia, tipo } = pickerInfo;
+      const hours = selectedDate.getHours().toString().padStart(2, "0");
+      const minutes = selectedDate.getMinutes().toString().padStart(2, "0");
       const formattedTime = `${hours}:${minutes}`;
 
-      const { dia, tipo } = pickerInfo;
       setForm((prev) => ({
         ...prev,
         horarios: {
@@ -165,40 +179,13 @@ export default function RegistroEstacionamiento() {
           },
         },
       }));
-
-      return;
     }
-
-    // iOS (y otras plataformas): selectedDate es undefined si canceló
-    if (!selectedDate) {
-      // usuario canceló
-      return;
-    }
-
-    setShowPicker(false);
-    if (!pickerInfo) return;
-
-    const hours = selectedDate.getHours().toString().padStart(2, "0");
-    const minutes = selectedDate.getMinutes().toString().padStart(2, "0");
-    const formattedTime = `${hours}:${minutes}`;
-
-    const { dia, tipo } = pickerInfo;
-    setForm((prev) => ({
-      ...prev,
-      horarios: {
-        ...prev.horarios,
-        [dia]: {
-          ...prev.horarios[dia as keyof typeof prev.horarios],
-          [tipo]: formattedTime,
-        },
-      },
-    }));
   };
 
   const openTimePicker = (dia: string, tipo: "apertura" | "cierre", currentTime: string) => {
     const [hours, minutes] = currentTime.split(":").map(Number);
     const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
+    date.setHours(isNaN(hours) ? 0 : hours, isNaN(minutes) ? 0 : minutes, 0, 0);
 
     setTempTime(date);
     setPickerInfo({ dia, tipo });
@@ -257,13 +244,74 @@ export default function RegistroEstacionamiento() {
     }
   };
 
+  // Validaciones antes de enviar
+  const validarAntesDeEnviar = () => {
+    // Nombre
+    const nombre = (form.nombre || "").trim();
+    if (!nombre) {
+      Alert.alert("Nombre requerido", "Ingresa el nombre del estacionamiento.");
+      return false;
+    }
+    if (nombre.length > 16) {
+      Alert.alert("Nombre inválido", "El nombre debe tener máximo 16 caracteres.");
+      return false;
+    }
+    // regex: sólo letras (unicode), números y espacios
+    const nombreValido = /^[\p{L}\p{N} ]+$/u.test(nombre);
+    if (!nombreValido) {
+      Alert.alert("Nombre inválido", "El nombre no debe contener caracteres especiales.");
+      return false;
+    }
+
+    // Ubicación
+    if (!form.latitud || !form.longitud) {
+      Alert.alert("Ubicación requerida", "Selecciona la ubicación en el mapa.");
+      return false;
+    }
+
+    // Capacidades (si se ingresaron) max 2 dígitos
+    const camposCapacidad = ["capacidadAutos", "capacidadMotos"] as const;
+    for (const key of camposCapacidad) {
+      const val = (form as any)[key];
+      if (val && !/^\d{1,2}$/.test(val)) {
+        Alert.alert("Capacidad inválida", "Las capacidades deben ser números entre 0 y 99.");
+        return false;
+      }
+    }
+
+    // Tarifas max 2 dígitos y numéricas
+    const camposTarifa = ["tarifaAutos", "tarifaMotos", "tarifaAutosDia", "tarifaMotosDia"] as const;
+    for (const key of camposTarifa) {
+      const val = (form as any)[key];
+      if (val && !/^\d{1,2}$/.test(val)) {
+        Alert.alert("Tarifa inválida", "Las tarifas deben ser números enteros entre 0 y 99 (Bs).");
+        return false;
+      }
+    }
+
+    // Tipo de lugar
+    if (!form.tipoLugar) {
+      Alert.alert("Tipo de lugar", "Selecciona el tipo de lugar.");
+      return false;
+    }
+
+    // Foto y licencia obligatorias
+    if (!fotoUri) {
+      Alert.alert("Falta foto", "Selecciona una foto de referencia.");
+      return false;
+    }
+    if (!licenciaUri) {
+      Alert.alert("Falta licencia", "Selecciona la licencia de funcionamiento.");
+      return false;
+    }
+
+    return true;
+  };
+
   // Envío formulario
   const handleSubmit = async () => {
     try {
-      if (!form.nombre.trim() || !form.latitud || !form.longitud) {
-        Alert.alert("Campos incompletos", "Por favor completa todos los campos obligatorios.");
-        return;
-      }
+      if (!validarAntesDeEnviar()) return;
 
       const usuario = await obtenerUsuarioActual();
       if (!usuario || !usuario.id) {
@@ -336,6 +384,13 @@ export default function RegistroEstacionamiento() {
       if (response.ok) {
         Alert.alert("✅ Éxito", "Parqueo registrado correctamente.");
         setPagina(1);
+
+        // ----> EMITIR EVENTO PARA QUE useMapa RECARGUE LOS PARQUEOS
+        try {
+          DeviceEventEmitter.emit("parqueoCreated");
+        } catch (e) {
+          console.warn("Error emitiendo evento parqueoCreated", e);
+        }
       } else {
         console.error("Respuesta error del servidor:", data);
         Alert.alert("❌ Error", data.message || "No se pudo registrar el parqueo.");
@@ -354,7 +409,6 @@ export default function RegistroEstacionamiento() {
     <ScrollView
       className="flex-1 px-5 py-4"
       style={{ backgroundColor: "#F6EEE4" }}
-      // padding pequeño para que el botón no quede cortado por el bottom-tab
       contentContainerStyle={{ paddingBottom: insets.bottom + 6 }}
       keyboardShouldPersistTaps="handled"
     >
@@ -374,7 +428,9 @@ export default function RegistroEstacionamiento() {
           onChangeText={(text) => handleInput("nombre", text)}
           placeholder="Ingresa el nombre del estacionamiento"
           placeholderTextColor="#9CA3AF"
+          maxLength={16}
         />
+        <Text className="text-sm text-gray-500 mt-1">Máx. 16 caracteres. Sin símbolos especiales.</Text>
       </View>
 
       {/* Dirección manual */}
@@ -396,10 +452,10 @@ export default function RegistroEstacionamiento() {
         ["telefono", "Teléfono", "phone-pad"],
         ["capacidadAutos", "Capacidad total de autos", "numeric"],
         ["capacidadMotos", "Capacidad total de motos", "numeric"],
-        ["tarifaAutos", "Tarifa autos/hora (Bs)", "decimal-pad"],
-        ["tarifaMotos", "Tarifa motos/hora (Bs)", "decimal-pad"],
-        ["tarifaAutosDia", "Tarifa autos/día (Bs)", "decimal-pad"],
-        ["tarifaMotosDia", "Tarifa motos/día (Bs)", "decimal-pad"],
+        ["tarifaAutos", "Tarifa autos/hora (Bs)", "numeric"],
+        ["tarifaMotos", "Tarifa motos/hora (Bs)", "numeric"],
+        ["tarifaAutosDia", "Tarifa autos/día (Bs)", "numeric"],
+        ["tarifaMotosDia", "Tarifa motos/día (Bs)", "numeric"],
       ].map(([key, label, keyboardType]) => (
         <View key={key} className="mb-4">
           <Text className="mb-1 font-medium" style={{ color: "#B2A83F" }}>
@@ -412,6 +468,7 @@ export default function RegistroEstacionamiento() {
             placeholder={label}
             placeholderTextColor="#9CA3AF"
             keyboardType={keyboardType as any}
+            maxLength={key.startsWith("tarifa") || key.startsWith("capacidad") ? 2 : undefined}
           />
         </View>
       ))}

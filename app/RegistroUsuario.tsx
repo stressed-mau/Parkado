@@ -15,6 +15,11 @@ import { z } from "zod";
 import Logo from "../assets/Logo";
 import GenericModal from "../app/modal"; // 👈 Importa tu modal
 
+type Props = {
+  onClose?: () => void;
+  onRegistered?: (data: any) => void; // opcional: para autologin si quisieras
+};
+
 // === SCHEMA DE VALIDACIÓN ===
 const registerSchema = z
   .object({
@@ -34,7 +39,7 @@ const registerSchema = z
     message: "Las contraseñas no coinciden",
   });
 
-export default function RegisterScreen() {
+export default function RegisterScreen({ onClose, onRegistered }: Props) {
   const router = useRouter();
 
   // === Estados ===
@@ -114,8 +119,17 @@ export default function RegisterScreen() {
       );
 
       // ✅ Mostrar modal de éxito
-      setModalMessage(response.data.message || "Usuario creado correctamente");
+      setModalMessage(response.data?.message || "Usuario creado correctamente");
       setShowSuccessModal(true);
+
+      // si el backend devuelve datos útiles (ej token), notificar al padre
+      if (onRegistered) {
+        try {
+          onRegistered(response.data);
+        } catch {
+          // ignore
+        }
+      }
 
       // Reset form
       setNombre("");
@@ -136,10 +150,24 @@ export default function RegisterScreen() {
 
   const handleModalClose = () => {
     setShowSuccessModal(false);
-    if (modalMessage.includes("correctamente")) {
-      setTimeout(() => {
+
+    // si mensaje indica éxito, volvemos al login
+    // preferimos onClose (flujo inline), y solo si no existe usamos router.push como fallback
+    if (modalMessage.toLowerCase().includes("correct") || modalMessage.toLowerCase().includes("éxito") || modalMessage.toLowerCase().includes("correctamente")) {
+      if (onClose) {
+        try {
+          onClose();
+          return;
+        } catch {
+          // continue to fallback
+        }
+      }
+      // fallback: navegación normal si no hay onClose
+      try {
         router.push("/(tabs)/Login");
-      }, 400);
+      } catch (e) {
+        console.warn("No se pudo navegar a Login (fallback):", e);
+      }
     }
   };
 

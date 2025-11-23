@@ -1,3 +1,4 @@
+// app/AdminParqueo.tsx  (o el archivo donde esté ParqueoDetalle / adminparqueo)
 import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
@@ -11,11 +12,17 @@ import {
 import ResumenCard from "@/components/Admin/ResumenCard";
 import { getTarifasYPlazas, getPlazas, getReservasPorParqueo } from "../api/parqueoApi";
 import { FontAwesome5 } from '@expo/vector-icons';
+import IngresarVehiculo from "./IngresarVehiculo"; // <-- import para mostrar inline
 
 // Ruta local al PDF que subiste (opcional)
 const PLAZA_DOC_PATH = '/mnt/data/patch plaza api.pdf';
 
-export default function ParqueoDetalle() {
+type Props = {
+  parqueoId?: number;
+  onClose?: () => void;
+};
+
+export default function ParqueoDetalle({ parqueoId = 1, onClose }: Props) {
   const [tarifas, setTarifas] = useState<any[]>([]);
   const [plazas, setPlazas] = useState<any[]>([]);
   const [reservas, setReservas] = useState<any[]>([]);
@@ -26,7 +33,11 @@ export default function ParqueoDetalle() {
   const [inconsistencias, setInconsistencias] = useState<any[]>([]);
   const [isReloadingReservas, setIsReloadingReservas] = useState(false);
 
-  const idParqueo = 1; // probando con parqueo 1
+  // nuevo state para mostrar el formulario inline
+  const [showIngresar, setShowIngresar] = useState(false);
+
+  // ahora usamos la prop parqueoId en lugar de la constante estática
+  const idParqueo = parqueoId;
 
   const cargarDatos = useCallback(async () => {
     try {
@@ -185,192 +196,221 @@ export default function ParqueoDetalle() {
     }
   };
 
+  // --------------------------
+  // RENDER: si showIngresar es true mostramos el formulario inline,
+  // si no mostramos la UI normal del parqueo.
+  // Esto mantiene los hooks siempre en el mismo orden.
+  // --------------------------
   return (
-    <View className="flex-1 p-6 bg-[#F6EEE4]">
-      <Text className="text-2xl font-bold my-7 text-[#22485A] self-center">
-        PARQUEO N° {idParqueo}
-      </Text>
-{/* --- Texto solicitado: Vehículos en parqueo --- */}
-      <Text className="text-lg font-semibold text-[#22485A] mb-3">
-        Vehículos en parqueo
-      </Text>`
-      `
-      {/* --- Tarjetas resumen basadas en plazas (fuente de verdad) --- */}
-      <View className="flex-row justify-between mb-4 gap-2.5">
-        <ResumenCard
-          key={"auto"}
-          label={tarjetaAuto.tipoNombre}
-          ocupados={tarjetaAuto.plazasOcupadas}
-          capacidad={tarjetaAuto.plazasTotales}
-          tarifa={`${tarjetaAuto.tarifaHora} Bs/h`}
-          color={"#2980b9"}
-          icon={<FontAwesome5 name="car-side" size={24} color="#2980b9" />}
+    <>
+      {showIngresar ? (
+        // IngresarVehiculo se muestra inline; le pasamos parqueoId y onClose
+        <IngresarVehiculo
+          // @ts-ignore: IngresarVehiculo puede no declarar props, pero pasarle no hace daño
+          parqueoId={idParqueo}
+          // onClose debe hacer volver a la pantalla de parqueo
+          onClose={() => {
+            setShowIngresar(false);
+            // recargamos datos cuando volvamos
+            cargarDatos();
+          }}
         />
-        <ResumenCard
-          key={"moto"}
-          label={tarjetaMoto.tipoNombre}
-          ocupados={tarjetaMoto.plazasOcupadas}
-          capacidad={tarjetaMoto.plazasTotales}
-          tarifa={`${tarjetaMoto.tarifaHora} Bs/h`}
-          color={"#8e44ad"}
-          icon={<FontAwesome5 name="motorcycle" size={24} color="#8e44ad" />}
-        />
-      </View>
-
-      
-
-      {/* --- Si hay inconsistencias, mostramos aviso y botón para recargar reservas --- */}
-      {inconsistencias.length > 0 && (
-        <View className="mb-3 p-3 bg-[#FFF4E5] border border-yellow-400 rounded-lg">
-          <Text className="font-semibold text-yellow-800 mb-1">
-            ⚠️ Se detectaron {inconsistencias.length} reserva(s) que no se corresponden con las plazas actuales.
-          </Text>
-          <Text className="text-sm text-yellow-800 mb-2">
-            Esto puede deberse a reservas creadas antes de eliminar plazas, borrados en back, o datos des-sincronizados.
-          </Text>
-          <View className="flex-row">
-            <TouchableOpacity
-              onPress={recargarReservas}
-              className="px-3 py-2 bg-[#7BB5CB] rounded-md mr-2"
-              disabled={isReloadingReservas}
-            >
-              <Text className="text-white">{isReloadingReservas ? 'Recargando...' : 'Recargar reservas'}</Text>
+      ) : (
+        <View className="flex-1 p-6 bg-[#F6EEE4]">
+          {/* BOTÓN VOLVER */}
+          {typeof onClose === "function" ? (
+            <TouchableOpacity onPress={() => onClose?.()} className="mb-4">
+              <Text className="text-[#22485A] font-semibold">⬅️ Volver</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                // mostrar detalles en consola. En producción podrías abrir un modal con la lista.
-                console.warn('Reservas inconsistentes detalladas:', inconsistencias);
-                Alert.alert('Detalles', `Hay ${inconsistencias.length} reserva(s) inconsistentes. Revisa logs.`);
-              }}
-              className="px-3 py-2 bg-[#FD721D] rounded-md"
-            >
-              <Text className="text-white">Ver detalles</Text>
-            </TouchableOpacity>
+          ) : null}
+
+          <Text className="text-2xl font-bold my-7 text-[#22485A] self-center">
+            PARQUEO N° {idParqueo}
+          </Text>
+  {/* --- Texto solicitado: Vehículos en parqueo --- */}
+          <Text className="text-lg font-semibold text-[#22485A] mb-3">
+            Vehículos en parqueo
+          </Text>
+
+          {/* --- Tarjetas resumen basadas en plazas (fuente de verdad) --- */}
+          <View className="flex-row justify-between mb-4 gap-2.5">
+            <ResumenCard
+              key={"auto"}
+              label={tarjetaAuto.tipoNombre}
+              ocupados={tarjetaAuto.plazasOcupadas}
+              capacidad={tarjetaAuto.plazasTotales}
+              tarifa={`${tarjetaAuto.tarifaHora} Bs/h`}
+              color={"#2980b9"}
+              icon={<FontAwesome5 name="car-side" size={24} color="#2980b9" />}
+            />
+            <ResumenCard
+              key={"moto"}
+              label={tarjetaMoto.tipoNombre}
+              ocupados={tarjetaMoto.plazasOcupadas}
+              capacidad={tarjetaMoto.plazasTotales}
+              tarifa={`${tarjetaMoto.tarifaHora} Bs/h`}
+              color={"#8e44ad"}
+              icon={<FontAwesome5 name="motorcycle" size={24} color="#8e44ad" />}
+            />
           </View>
-        </View>
-      )}
 
-      {/* --- Filtros (Autos / Motos / Todos) --- */}
-      <View className="flex-row justify-start mb-4">
-        {["Auto", "Moto", "Todos"].map((tipo) => (
+          {/* --- Si hay inconsistencias, mostramos aviso y botón para recargar reservas --- */}
+          {inconsistencias.length > 0 && (
+            <View className="mb-3 p-3 bg-[#FFF4E5] border border-yellow-400 rounded-lg">
+              <Text className="font-semibold text-yellow-800 mb-1">
+                ⚠️ Se detectaron {inconsistencias.length} reserva(s) que no se corresponden con las plazas actuales.
+              </Text>
+              <Text className="text-sm text-yellow-800 mb-2">
+                Esto puede deberse a reservas creadas antes de eliminar plazas, borrados en back, o datos des-sincronizados.
+              </Text>
+              <View className="flex-row">
+                <TouchableOpacity
+                  onPress={recargarReservas}
+                  className="px-3 py-2 bg-[#7BB5CB] rounded-md mr-2"
+                  disabled={isReloadingReservas}
+                >
+                  <Text className="text-white">{isReloadingReservas ? 'Recargando...' : 'Recargar reservas'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    // mostrar detalles en consola. En producción podrías abrir un modal con la lista.
+                    console.warn('Reservas inconsistentes detalladas:', inconsistencias);
+                    Alert.alert('Detalles', `Hay ${inconsistencias.length} reserva(s) inconsistentes. Revisa logs.`);
+                  }}
+                  className="px-3 py-2 bg-[#FD721D] rounded-md"
+                >
+                  <Text className="text-white">Ver detalles</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* --- Filtros (Autos / Motos / Todos) --- */}
+          <View className="flex-row justify-start mb-4">
+            {["Auto", "Moto", "Todos"].map((tipo) => (
+              <TouchableOpacity
+                key={tipo}
+                onPress={() => setFilter(tipo as any)}
+                className={`px-4 py-2 mx-1 rounded-xl border ${
+                  filter === tipo
+                    ? tipo === "Auto"
+                      ? "bg-blue-400 border-blue-500"
+                      : tipo === "Moto"
+                      ? "bg-blue-400 border-blue-500"
+                      : "bg-gray-400 border-gray-500"
+                    : "bg-white border-gray-300"
+                }`}
+              >
+                <Text
+                  className={`font-semibold ${
+                    filter === tipo ? "text-white" : "text-gray-600"
+                  }`}
+                >
+                  {tipo === "Auto" ? "Autos" : tipo === "Moto" ? "Motos" : "Todos"}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           <TouchableOpacity
-            key={tipo}
-            onPress={() => setFilter(tipo as any)}
-            className={`px-4 py-2 mx-1 rounded-xl border ${
-              filter === tipo
-                ? tipo === "Auto"
-                  ? "bg-blue-400 border-blue-500"
-                  : tipo === "Moto"
-                  ? "bg-blue-400 border-blue-500"
-                  : "bg-gray-400 border-gray-500"
-                : "bg-white border-gray-300"
-            }`}
+            onPress={() => setPlazasOpen(!plazasOpen)}
+            className="mb-3 w-full px-4 py-2 bg-[#7bb3cd] rounded-xl self-start"
           >
-            <Text
-              className={`font-semibold ${
-                filter === tipo ? "text-white" : "text-gray-600"
-              }`}
-            >
-              {tipo === "Auto" ? "Autos" : tipo === "Moto" ? "Motos" : "Todos"}
+            <Text className="font-semibold text-white">
+              {plazasOpen ? "∆ Ocultar plazas" : "∇ Mostrar plazas"}
             </Text>
           </TouchableOpacity>
-        ))}
-      </View>
 
-      <TouchableOpacity
-        onPress={() => setPlazasOpen(!plazasOpen)}
-        className="mb-3 w-full px-4 py-2 bg-[#7bb3cd] rounded-xl self-start"
-      >
-        <Text className="font-semibold text-white">
-          {plazasOpen ? "∆ Ocultar plazas" : "∇ Mostrar plazas"}
-        </Text>
-      </TouchableOpacity>
-
-      {/* --- Mapa de espacios --- */}
-      {plazasOpen && (
-        <>
-          {loading ? (
-            <ActivityIndicator size="large" color="#2980b9" />
-          ) : (
-            <FlatList
-              data={plazasFiltradas}
-              keyExtractor={(item) => (item?.id ? item.id.toString() : Math.random().toString())}
-              numColumns={4}
-              columnWrapperStyle={{
-                justifyContent: "space-between",
-                marginBottom: 10,
-              }}
-              renderItem={({ item }) => (
-                <View
-                  className={`flex-1 items-center justify-center p-3 rounded-lg border ${getEstadoColor(
-                    item.estado
-                  )}`}
-                  style={{ marginHorizontal: 5 }}
-                >
-                  <Text className="font-bold text-[#222]">{item.nroPlaza ?? "-"}</Text>
-                  <Text className="text-sm text-[#444]">
-                    {(item.estado ?? "DISPONIBLE").toString().toLowerCase()}
-                  </Text>
-                </View>
-              )}
-            />
-          )}
-        </>
-      )}
-
-      <TouchableOpacity
-        onPress={() => setVehiculosOpen(!vehiculosOpen)}
-        className="mb-3 w-full px-4 py-2 bg-[#7bb3cd] rounded-xl self-start"
-      >
-        <Text className="font-semibold text-white">
-          {vehiculosOpen ? "∆ Mostrar vehiculos en el parqueo" : "∇ Mostrar vehiculos en el parqueo"}
-        </Text>
-      </TouchableOpacity>
-
-      {vehiculosOpen && (
-        <View className="bg-[#e4ecf6] border-[#087E88] p-3 rounded-xl border mb-5">
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={{ minWidth: 800 }}>
-              {/* Encabezado */}
-              <View className="flex-row border-[#087E88] border-b pb-2 mb-2">
-                <Text className="flex-1 font-bold text-[#055158]">Placa</Text>
-                <Text className="flex-1 font-bold text-[#055158]">Tipo</Text>
-                <Text className="flex-1 font-bold text-[#055158]">Espacio</Text>
-                <Text className="flex-1 font-bold text-[#055158]">Fecha Inicio</Text>
-                <Text className="flex-1 font-bold text-[#055158]">Hora Inicio</Text>
-                <Text className="flex-1 font-bold text-[#055158]">Fecha Fin</Text>
-                <Text className="flex-1 font-bold text-[#055158]">Hora Fin</Text>
-              </View>
-
-              {reservas.length === 0 ? (
-                <Text className="text-gray-500 text-center">No hay vehículos registrados</Text>
+          {/* --- Mapa de espacios --- */}
+          {plazasOpen && (
+            <>
+              {loading ? (
+                <ActivityIndicator size="large" color="#2980b9" />
               ) : (
-                reservas.slice(0, 5).map((r) => (
-                  <View key={r.id} className="flex-row border-[#087E88] py-1 border-b">
-                    <Text className="flex-1">{r.matriculaVehiculo ?? "-"}</Text>
-                    <Text className="flex-1">{r.plaza?.tipoVehiculo?.nombre ?? r.plaza?.tipoVehiculo ?? "-"}</Text>
-                    <Text className="flex-1">{r.plaza?.nroPlaza ?? r.plazaId ?? "-"}</Text>
-                    <Text className="flex-1">{formatearFecha(r.fechaHoraIni)}</Text>
-                    <Text className="flex-1">{formatearHora(r.fechaHoraIni)}</Text>
-                    <Text className="flex-1">
-                      {r.fechaHoraFin ? formatearFecha(r.fechaHoraFin) : "--"}
-                    </Text>
-                    <Text className="flex-1">
-                      {r.fechaHoraFin ? formatearHora(r.fechaHoraFin) : "--"}
-                    </Text>
-                  </View>
-                ))
+                <FlatList
+                  data={plazasFiltradas}
+                  keyExtractor={(item) => (item?.id ? item.id.toString() : Math.random().toString())}
+                  numColumns={4}
+                  columnWrapperStyle={{
+                    justifyContent: "space-between",
+                    marginBottom: 10,
+                  }}
+                  renderItem={({ item }) => (
+                    <View
+                      className={`flex-1 items-center justify-center p-3 rounded-lg border ${getEstadoColor(
+                        item.estado
+                      )}`}
+                      style={{ marginHorizontal: 5 }}
+                    >
+                      <Text className="font-bold text-[#222]">{item.nroPlaza ?? "-"}</Text>
+                      <Text className="text-sm text-[#444]">
+                        {(item.estado ?? "DISPONIBLE").toString().toLowerCase()}
+                      </Text>
+                    </View>
+                  )}
+                />
               )}
+            </>
+          )}
+
+          <TouchableOpacity
+            onPress={() => setVehiculosOpen(!vehiculosOpen)}
+            className="mb-3 w-full px-4 py-2 bg-[#7bb3cd] rounded-xl self-start"
+          >
+            <Text className="font-semibold text-white">
+              {vehiculosOpen ? "∆ Mostrar vehiculos en el parqueo" : "∇ Mostrar vehiculos en el parqueo"}
+            </Text>
+          </TouchableOpacity>
+
+          {vehiculosOpen && (
+            <View className="bg-[#e4ecf6] border-[#087E88] p-3 rounded-xl border mb-5">
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={{ minWidth: 800 }}>
+                  {/* Encabezado */}
+                  <View className="flex-row border-[#087E88] border-b pb-2 mb-2">
+                    <Text className="flex-1 font-bold text-[#055158]">Placa</Text>
+                    <Text className="flex-1 font-bold text-[#055158]">Tipo</Text>
+                    <Text className="flex-1 font-bold text-[#055158]">Espacio</Text>
+                    <Text className="flex-1 font-bold text-[#055158]">Fecha Inicio</Text>
+                    <Text className="flex-1 font-bold text-[#055158]">Hora Inicio</Text>
+                    <Text className="flex-1 font-bold text-[#055158]">Fecha Fin</Text>
+                    <Text className="flex-1 font-bold text-[#055158]">Hora Fin</Text>
+                  </View>
+
+                  {reservas.length === 0 ? (
+                    <Text className="text-gray-500 text-center">No hay vehículos registrados</Text>
+                  ) : (
+                    reservas.slice(0, 5).map((r) => (
+                      <View key={r.id} className="flex-row border-[#087E88] py-1 border-b">
+                        <Text className="flex-1">{r.matriculaVehiculo ?? "-"}</Text>
+                        <Text className="flex-1">{r.plaza?.tipoVehiculo?.nombre ?? r.plaza?.tipoVehiculo ?? "-"}</Text>
+                        <Text className="flex-1">{r.plaza?.nroPlaza ?? r.plazaId ?? "-"}</Text>
+                        <Text className="flex-1">{formatearFecha(r.fechaHoraIni)}</Text>
+                        <Text className="flex-1">{formatearHora(r.fechaHoraIni)}</Text>
+                        <Text className="flex-1">
+                          {r.fechaHoraFin ? formatearFecha(r.fechaHoraFin) : "--"}
+                        </Text>
+                        <Text className="flex-1">
+                          {r.fechaHoraFin ? formatearHora(r.fechaHoraFin) : "--"}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              </ScrollView>
             </View>
-          </ScrollView>
+          )}
+{/*
+          <View className="flex-row gap-[9px] mb-[86px]">
+            <TouchableOpacity
+              onPress={() => setShowIngresar(true)}
+              className="bg-[#2980b9] py-[13px] rounded-xl items-center flex-1 mr-[9px]"
+            >
+              <Text className="text-center text-white font-bold text-[17px]">Ingresar Vehículo</Text>
+            </TouchableOpacity>
+          </View> */}
         </View>
       )}
-
-      <View className="flex-row gap-[9px] mb-[86px]">
-        <TouchableOpacity className="bg-[#2980b9] py-[13px] rounded-xl items-center flex-1 mr-[9px]">
-          <Text className="text-center text-white font-bold text-[17px]">Ingresar Vehículo</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+    </>
   );
 }

@@ -365,6 +365,7 @@ export const useMapa = () => {
 );
 
 
+
   // -------------------------
   // UI actions: centrar, zoom, marker press, clear, show directions
   // -------------------------
@@ -566,6 +567,37 @@ export const useMapa = () => {
     },
     [userLocation, fetchRoute]
   );
+
+// Cuando venimos desde otra pantalla con destLat/destLng en la URL (desde "Ver Ruta")
+useEffect(() => {
+  // si no vienen coords en los params, no hacemos nada
+  if (!params.destLat || !params.destLng) return;
+  // si todavía NO tenemos userLocation, esperamos sin mostrar alerta
+  if (!userLocation) return;
+
+  const lat = Number(params.destLat);
+  const lng = Number(params.destLng);
+
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    console.warn('❌ destLat/destLng no son números válidos', params.destLat, params.destLng);
+    return;
+  }
+
+  const destCoords: Coords = { latitude: lat, longitude: lng };
+
+  setDestination(destCoords);
+  setDestinationName(params.destNombre ?? null);
+  setRouteCoordinates([]);
+  setShowDirections(false);
+
+  console.log("🚗  Auto-trazando ruta desde params del navegador...");
+  console.log("📍 ORIGEN:", userLocation);
+  console.log("🏁 DESTINO:", destCoords);
+
+  fetchRoute(userLocation, destCoords, params.destNombre ?? undefined);
+}, [params.destLat, params.destLng, params.destNombre, userLocation, fetchRoute]);
+
+
 
   // -------------------------
   // Retorno del hook (incluye reloadParqueos)

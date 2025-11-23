@@ -1,4 +1,3 @@
-// app/PerfilAdministrador.tsx
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
@@ -92,6 +91,42 @@ export default function PerfilAdministrador() {
     };
   }, []);
 
+  // Función para cancelar la reserva y actualizar el estado de la plaza
+  const cancelarReserva = async (reservaId, plazaId) => {
+    try {
+      setLoading(true);
+
+      // Realizamos la solicitud para cancelar la reserva
+      await axios.delete(`${BACKEND_BASE}/api/reservas/${reservaId}`, {
+        headers: { Authorization: `Bearer ${usuario.token}` },
+        data: { usuarioId: usuario.id }
+      });
+
+      // Luego, actualizamos el estado de la plaza a "DISPONIBLE"
+      await axios.patch(`${BACKEND_BASE}/api/plazas/${plazaId}`, {
+        userId: usuario.id,
+        estado: "DISPONIBLE"
+      });
+
+      // Refrescamos las reservas después de la cancelación
+      const RESERVAS_API = `${BACKEND_BASE}/api/reservas/usuario/${usuario.id}`;
+      const resReservas = await axios.get(RESERVAS_API, {
+        headers: { Authorization: `Bearer ${usuario.token}` },
+      });
+      const array = Array.isArray(resReservas.data)
+        ? resReservas.data
+        : resReservas.data?.data || [];
+
+      setReservas(array);
+      Alert.alert("Éxito", "Reserva cancelada y plaza disponible.");
+    } catch (error) {
+      console.error("Error al cancelar reserva:", error);
+      Alert.alert("Error", "No se pudo cancelar la reserva.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Si el usuario pulsó "Administrar parqueos", mostramos la vista externa inline
   if (showParqueosOwnerView) {
     return (
@@ -140,16 +175,6 @@ export default function PerfilAdministrador() {
         </View>
       </View>
 
-      {/* Botón grande Editar perfil */}
-      <TouchableOpacity
-        style={[styles.bigButton, { backgroundColor: colores.azul }]}
-        onPress={() => {
-          Alert.alert("Editar perfil", "Aquí iría la pantalla de edición (placeholder).");
-        }}
-      >
-        <Text style={styles.bigButtonText}>Editar perfil</Text>
-      </TouchableOpacity>
-
       {/* Botón Administrar parqueos (ahora muestra inline la vista Parc. por propietario) */}
       <TouchableOpacity
         style={[styles.manageButton]}
@@ -197,6 +222,12 @@ export default function PerfilAdministrador() {
                     <Text style={styles.cardSmall}><Text style={{ fontWeight: "700" }}>Matrícula:</Text> {matricula}</Text>
                     <Text style={styles.cardSmall}><Text style={{ fontWeight: "700" }}>Desde:</Text> {desde}</Text>
                     <Text style={styles.cardSmall}><Text style={{ fontWeight: "700" }}>Hasta:</Text> {hasta}</Text>
+                    <TouchableOpacity
+                      onPress={() => cancelarReserva(r?.id, r?.plaza?.id)}
+                      style={styles.cancelButton}
+                    >
+                      <Text style={styles.cancelText}>Cancelar Reserva</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </View>
@@ -289,4 +320,17 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "800", fontSize: 16 },
   cardSubtitle: { color: "#6B7280", marginTop: 4 },
   cardSmall: { color: "#374151", marginTop: 6 },
+
+  cancelButton: {
+    backgroundColor: "#FD721D",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  cancelText: {
+    color: "#fff",
+    fontWeight: "700",
+    textAlign: "center",
+  },
 });

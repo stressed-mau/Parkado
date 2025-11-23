@@ -1,4 +1,3 @@
-// app/ParqueoPorPropietario.tsx
 import axios from "axios";
 import React, { useEffect, useState } from "react";
 import {
@@ -9,12 +8,15 @@ import {
   TouchableOpacity,
   View,
   StyleSheet,
+  Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Logo from "../assets/Logo";
 import DashboardParqueo from "./Dashboard"; // importamos el dashboard inline
-import ParqueoDetalle from "./AdminParqueo"; // <-- importamos la vista admin (ParqueoDetalle)
+import AdminParqueo from "./AdminParqueo"; // Cambio de ParqueoDetalle a AdminParqueo
+import EditarEstacionamiento from "./EditarParqueo"; // Importamos el componente de edición inline
+import { useMapa } from '../hooks/useMapa'; // Asegúrate de tener esta función exportada correctamente
 
 const BACKEND_BASE = "https://parkado-backend.vercel.app";
 const colores = {
@@ -47,6 +49,10 @@ export default function ParqueoPorPropietario({
 
   // Mostrar detalle (admin) inline para un parqueo seleccionado
   const [showParqueoDetalle, setShowParqueoDetalle] = useState(false);
+  const [showEditarParqueo, setShowEditarParqueo] = useState(false); // Nuevo estado para editar inline
+
+  // Llamada a la función useMapa para obtener la función de recarga
+  const { reloadParqueos } = useMapa(); // Asume que useMapa tiene reloadParqueos
 
   useEffect(() => {
     let mounted = true;
@@ -76,6 +82,37 @@ export default function ParqueoPorPropietario({
     };
   }, [API]);
 
+  const eliminarParqueo = async (parqueoId: number) => {
+    if (!ownerId) {
+      Alert.alert("Error", "No se pudo obtener el ownerId.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Llamada a la API DELETE
+      await axios.delete(`${BACKEND_BASE}/api/parqueos/${parqueoId}`, {
+        headers: { Authorization: `Bearer ${ownerId}` },
+        data: { userId: ownerId }, // Usamos ownerId en lugar de userId
+      });
+
+      // Actualizar la lista de parqueos después de la eliminación
+      const updatedParqueos = parqueos.filter((p) => p.id !== parqueoId);
+      setParqueos(updatedParqueos);
+
+      // Recargar el mapa para reflejar los cambios
+      await reloadParqueos(); // Recarga los parqueos desde la API
+
+      Alert.alert("Éxito", "Parqueo eliminado correctamente.");
+    } catch (error) {
+      console.error("Error al eliminar parqueo:", error);
+      Alert.alert("Error", "No se pudo eliminar el parqueo.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Si el usuario abrió el dashboard para un parqueo seleccionado, renderizamos esa vista inline
   if (showDashboard && selectedParqueoId !== null) {
     return (
@@ -93,13 +130,23 @@ export default function ParqueoPorPropietario({
   // Si el usuario abrió el detalle (admin) para un parqueo seleccionado, renderizamos esa vista inline
   if (showParqueoDetalle && selectedParqueoId !== null) {
     return (
-      <ParqueoDetalle
+      <AdminParqueo // Aquí hemos cambiado ParqueoDetalle por AdminParqueo
         parqueoId={selectedParqueoId}
         onClose={() => {
           // volver a la lista de parqueos
           setShowParqueoDetalle(false);
           setSelectedParqueoId(null);
         }}
+      />
+    );
+  }
+
+  // Si el usuario quiere editar el parqueo inline, mostramos el componente de edición
+  if (showEditarParqueo && selectedParqueoId !== null) {
+    return (
+      <EditarEstacionamiento
+        route={{ params: { id: selectedParqueoId } }} // Pasamos la id del parqueo al editar
+        onClose={() => setShowEditarParqueo(false)} // Función para cerrar la vista de edición
       />
     );
   }
@@ -160,7 +207,10 @@ export default function ParqueoPorPropietario({
 
                   <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
                     <TouchableOpacity
-                      onPress={() => console.log("Editar parqueo", p?.id)}
+                      onPress={() => {
+                        setSelectedParqueoId(p?.id ?? null);
+                        setShowEditarParqueo(true); // Mostrar formulario de edición inline
+                      }}
                       style={styles.iconBtnBlue}
                     >
                       <MaterialCommunityIcons name="pencil" size={20} color={colores.azul} />
@@ -180,7 +230,7 @@ export default function ParqueoPorPropietario({
 
                     <TouchableOpacity
                       onPress={() => {
-                        // <-- AQUÍ: abrimos ParqueoDetalle inline (admin) con la id correspondiente
+                        // <-- AQUÍ: abrimos AdminParqueo inline (admin) con la id correspondiente
                         setSelectedParqueoId(p?.id ?? null);
                         setShowParqueoDetalle(true);
                       }}
@@ -193,7 +243,7 @@ export default function ParqueoPorPropietario({
                     <View style={{ flex: 1 }} />
 
                     <TouchableOpacity
-                      onPress={() => console.log("Borrar parqueo", p?.id)}
+                      onPress={() => eliminarParqueo(p.id)} // Eliminar parqueo
                       style={[styles.iconBtn, { borderColor: colores.naranja }]}
                     >
                       <MaterialCommunityIcons name="trash-can-outline" size={20} color={colores.naranja} />

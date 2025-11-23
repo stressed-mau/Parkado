@@ -85,6 +85,42 @@ export default function PerfilUsuario({ navigation }) {
     fetchData();
   }, [userId, token]);
 
+  // Función para cancelar la reserva y actualizar el estado de la plaza
+  const cancelarReserva = async (reservaId, plazaId) => {
+    try {
+      setLoading(true);
+
+      // Realizamos la solicitud para cancelar la reserva
+      await axios.delete(`${BACKEND_BASE}/api/reservas/${reservaId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        data: { usuarioId: userId }
+      });
+
+      // Luego, actualizamos el estado de la plaza a "DISPONIBLE"
+      await axios.patch(`${BACKEND_BASE}/api/plazas/${plazaId}`, {
+        userId: userId,
+        estado: "DISPONIBLE"
+      });
+
+      // Refrescamos las reservas después de la cancelación
+      const RESERVAS_API = `${BACKEND_BASE}/api/reservas/usuario/${userId}`;
+      const resReservas = await axios.get(RESERVAS_API, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const array = Array.isArray(resReservas.data)
+        ? resReservas.data
+        : resReservas.data?.data || [];
+
+      setReservas(array);
+      Alert.alert("Éxito", "Reserva cancelada y plaza disponible.");
+    } catch (error) {
+      console.error("Error al cancelar reserva:", error);
+      Alert.alert("Error", "No se pudo cancelar la reserva.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (loading)
     return (
       <View className="flex-1 items-center justify-center">
@@ -128,17 +164,6 @@ export default function PerfilUsuario({ navigation }) {
         </View>
       </View>
 
-      {/* Botón editar */}
-      <TouchableOpacity
-        className="flex-row items-center justify-center py-3 rounded-xl mb-6"
-        style={{ backgroundColor: colores.azul }}
-        onPress={() => {
-          if (navigation?.navigate) navigation.navigate("EditarPerfil");
-        }}
-      >
-        <Text className="text-white font-semibold text-lg">Editar perfil</Text>
-      </TouchableOpacity>
-
       {/* Título */}
       <Text className="text-lg font-bold mb-2">Historial de reservas</Text>
 
@@ -150,11 +175,7 @@ export default function PerfilUsuario({ navigation }) {
           reservas.map((reserva) => {
             const parqueo = reserva?.plaza?.parqueo || reserva?.parqueo || {};
             const rawImagen =
-              parqueo?.foto ||
-              parqueo?.imagen ||
-              parqueo?.imagenUrl ||
-              parqueo?.fotos?.[0] ||
-              null;
+              parqueo?.fotos?.[0]?.url || placeholderLocal;  // Cambié esto para usar la primera imagen
 
             const imagenParqueo = resolveImageUrl(
               rawImagen,
@@ -182,11 +203,11 @@ export default function PerfilUsuario({ navigation }) {
               ? formatDate(reserva.fechaHoraFin)
               : null;
 
-            const key = reserva?.id || reserva?._id || Math.random().toString();
+            const plazaId = reserva?.plaza?.id || reserva?.plaza?._id;
 
             return (
               <View
-                key={key}
+                key={reserva?.id}
                 className="mb-4 rounded-xl border border-gray-300 bg-white"
               >
                 <View className="flex-row items-center p-3 bg-gray-100 rounded-xl">
@@ -225,6 +246,14 @@ export default function PerfilUsuario({ navigation }) {
                         <Text className="font-semibold">Hasta:</Text> {hasta}
                       </Text>
                     )}
+
+                    <TouchableOpacity 
+  onPress={() => cancelarReserva(reserva.id, plazaId)} 
+  className="mt-3 bg-[#FD721D] text-[#fff]  px-4 py-2 rounded-lg"
+>
+  <Text className="text-center text-[#fff] font-bold">Cancelar Reserva</Text>
+</TouchableOpacity>
+
                   </View>
                 </View>
               </View>

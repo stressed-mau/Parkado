@@ -447,11 +447,7 @@ export default function LoginUsuario({ navigation }: any) {
 
     return (
       <View style={{ flex: 1 }}>
-        {roleText ? (
-          <View style={{ padding: 10, backgroundColor: "#FFF8E6", alignItems: "center" }}>
-            <Text style={{ fontWeight: "700", color: "#7B6B00" }}>Sesión iniciada como: {roleText}</Text>
-          </View>
-        ) : null}
+        
 
         {isConductor ? <PerfilConductor /> : <PerfilAdministrador />}
 
@@ -472,52 +468,7 @@ export default function LoginUsuario({ navigation }: any) {
           </View>
         ) : null}
 
-        <Modal
-          visible={showRoleModal}
-          animationType="fade"
-          transparent
-          onRequestClose={() => setShowRoleModal(false)}
-        >
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0,0,0,0.4)",
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <View
-              style={{
-                width: "85%",
-                backgroundColor: "white",
-                borderRadius: 12,
-                padding: 18,
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 8 }}>Información de sesión</Text>
-              <Text style={{ fontSize: 16, marginBottom: 12 }}>
-                Rol: <Text style={{ fontWeight: "700" }}>{roleText ?? "N/D"}</Text>
-              </Text>
-
-              <Text style={{ fontSize: 13, color: "#666", textAlign: "center", marginBottom: 16 }}>
-                Este modal indica el rol detectado en tu cuenta. Cierra para continuar.
-              </Text>
-
-              <Pressable
-                onPress={() => setShowRoleModal(false)}
-                style={{
-                  paddingVertical: 10,
-                  paddingHorizontal: 18,
-                  borderRadius: 8,
-                  backgroundColor: "#FD721D",
-                }}
-              >
-                <Text style={{ color: "white", fontWeight: "700" }}>Cerrar</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
+        
       </View>
     );
   }

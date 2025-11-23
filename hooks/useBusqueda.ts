@@ -24,7 +24,6 @@ export const useBusqueda = () => {
 
   const safeNumber = (v: any): number | undefined => {
     if (v === undefined || v === null) return undefined;
-    // evitar que "" -> 0 se interprete como válido: sólo aceptar strings numéricas no vacías
     if (typeof v === 'string' && v.trim() === '') return undefined;
     const n = Number(v);
     return Number.isFinite(n) ? n : undefined;
@@ -60,7 +59,6 @@ export const useBusqueda = () => {
       if (lng !== undefined) params.append('lng', String(lng));
       if (radius !== undefined && radius > 0) params.append('radius', String(radius));
       if (ratingMinimo !== undefined && ratingMinimo > 0) params.append('ratingMinimo', String(ratingMinimo));
-      // nota: la API exige precioMaxHora > 0, por eso validamos > 0
       if (precioMaxHora !== undefined && precioMaxHora > 0) params.append('precioMaxHora', String(precioMaxHora));
       if (tipoVehiculoId !== undefined && tipoVehiculoId > 0) params.append('tipoVehiculoId', String(tipoVehiculoId));
 
@@ -89,7 +87,6 @@ export const useBusqueda = () => {
       console.log('📡 fetch status:', res.status, 'body:', text);
 
       if (!res.ok) {
-        // intentar parsear mensaje de error del servidor
         let message: string = `Error ${res.status}`;
         try {
           const parsed = JSON.parse(text);
@@ -98,28 +95,68 @@ export const useBusqueda = () => {
           message = typeof text === 'string' ? text.slice(0, 1000) : String(text);
         }
 
-        // Parche (cliente): si backend responde 500 con mensaje genérico "Error interno del servidor",
-        // interpretamos como "sin resultados" en lugar de romper la app (fix temporal hasta que backend lo corrija).
         if (res.status === 500 && typeof message === 'string' && message.includes('Error interno del servidor')) {
           console.warn('⚠ API devolvió 500 (Error interno), se devuelve [] en lugar de propagar error.');
           setResultados([]);
           return [];
         }
 
-        // Si backend devuelve 400 por validación, lanzar con mensaje legible
         throw new Error(message);
       }
 
-      const data: ParqueoBusqueda[] = JSON.parse(text || '[]');
-      setResultados(data || []);
+            // ------------------------------
+      //  PARSEO + FILTRO SOLO POR INICIO
+      // ------------------------------
+      let raw: any;
+      try {
+        raw = JSON.parse(text || '[]');
+      } catch (e) {
+        console.warn('Respuesta de búsqueda no es JSON válido:', e);
+        raw = [];
+      }
+
+      let data: ParqueoBusqueda[] = Array.isArray(raw) ? raw : [];
+
+      if (opciones.q && typeof opciones.q === 'string' && opciones.q.trim()) {
+        const normalize = (str: string) =>
+  str
+    .trim() // ← AGREGAR ESTO
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+
+        const qNorm = normalize(opciones.q.trim());
+
+        const startsWithField = (rawField?: string) => {
+          if (!rawField) return false;
+          const norm = normalize(rawField);
+          if (!qNorm) return false;
+          return norm.startsWith(qNorm); // 🔥 SOLO inicio de cadena
+        };
+
+        data = data.filter((p) => {
+  const nombre = p.nombre ?? "";
+  const dir = p.direccion ?? "";
+
+  const normNombre = normalize(nombre);
+  const normDir = normalize(dir);
+
+  // FILTRO EXACTO CARACTER A CARACTER
+  return normNombre.startsWith(qNorm) || normDir.startsWith(qNorm);
+});
+
+      }
+
+      setResultados(data);
       return data;
+
+
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error desconocido en la búsqueda';
       setError(msg);
       console.error('❌ useBusqueda error:', e);
-      // Mostrar alerta ligera al usuario (puedes quitar si prefieres no alertar)
       Alert.alert('Error de Búsqueda', msg);
-      // Devolver array vacío para que la UI lo trate como "sin resultados"
       setResultados([]);
       return [];
     } finally {
@@ -132,7 +169,6 @@ export const useBusqueda = () => {
     loading,
     error,
     buscar: fetchBusqueda,
-    // compatibilidad
     buscarGlobal: () => fetchBusqueda({}),
     buscarPorTexto: (q: string) => fetchBusqueda({ q }),
     limpiarResultados: () => {

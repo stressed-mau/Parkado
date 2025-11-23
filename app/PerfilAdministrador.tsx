@@ -1,19 +1,19 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  Alert,
+  StyleSheet,
 } from "react-native";
 // no more useRouter
-import ParqueoPorPropietario from "../app/ParqueoPorPropietario"; // componente externo que muestra parqueos del owner
 import Logo from "../assets/Logo";
+import ParqueoPorPropietario from "../app/ParqueoPorPropietario"; // componente externo que muestra parqueos del owner
 
 const BACKEND_BASE = "https://parkado-backend.vercel.app";
 const placeholderLocal = "file:///mnt/data/e6160939-b67a-4a41-8e50-9802c507f7e1.png";
@@ -90,15 +90,6 @@ export default function PerfilAdministrador() {
       mounted = false;
     };
   }, []);
-
-  // logout SIEMPRE visible
-  const handleLogout = async () => {
-    await AsyncStorage.removeItem("userData");
-    Alert.alert("Sesión cerrada", "Has salido de tu cuenta.");
-    setUsuario(null);
-    setReservas([]);
-    global.location?.reload?.();
-  };
 
   // Función para cancelar la reserva y actualizar el estado de la plaza
   const cancelarReserva = async (reservaId, plazaId) => {
@@ -244,25 +235,6 @@ export default function PerfilAdministrador() {
           })
         )}
       </View>
-
-      {/* botón cerrar sesion SIEMPRE visible */}
-      <TouchableOpacity
-        onPress={handleLogout}
-        style={{
-          backgroundColor: "#FD721D",
-          marginHorizontal: 40,
-          marginTop: 20,
-          marginBottom: 40,
-          paddingVertical: 14,
-          borderRadius: 12,
-          alignItems: "center",
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "800", fontSize: 16 }}>
-          Cerrar sesión
-        </Text>
-      </TouchableOpacity>
-
     </ScrollView>
   );
 }

@@ -8,6 +8,7 @@ import * as Location from "expo-location";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  DeviceEventEmitter,
   Image,
   Platform,
   ScrollView,
@@ -15,17 +16,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import MapView, { MapPressEvent, Marker } from "react-native-maps";
 import { Button, Checkbox } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-/**
- * RUTAS LOCALES A LOS PDF SUBIDOS (referencia)
- */
-const DOC_PATH_1 = "/mnt/data/Apis PArkado.pdf";
-const DOC_PATH_2 = "/mnt/data/MODIFICACION DE APIS mas servisios.pdf";
+import Logo from "../../assets/Logo";
 
 export default function RegistroEstacionamiento() {
   const insets = useSafeAreaInsets();
@@ -158,28 +154,51 @@ export default function RegistroEstacionamiento() {
     });
   };
 
-  // Horarios picker - CORREGIDO para Android/iOS
+  // Horarios picker
   const handleTimeChange = (event: any, selectedDate?: Date) => {
-    // En Android suele recibir event; en iOS selectedDate puede ser undefined si cancela
-    setShowPicker(false);
-
-    if (selectedDate && pickerInfo) {
-      const { dia, tipo } = pickerInfo;
-      const hours = selectedDate.getHours().toString().padStart(2, "0");
-      const minutes = selectedDate.getMinutes().toString().padStart(2, "0");
-      const formattedTime = `${hours}:${minutes}`;
-
-      setForm((prev) => ({
-        ...prev,
-        horarios: {
-          ...prev.horarios,
-          [dia]: {
-            ...prev.horarios[dia as keyof typeof prev.horarios],
-            [tipo]: formattedTime,
-          },
-        },
-      }));
+    // Android: event.type puede ser 'set' o 'dismissed'
+    // iOS: no viene event.type de la misma forma, selectedDate suele estar presente
+    if (!pickerInfo) {
+      // seguridad
+      setShowPicker(false);
+      return;
     }
+
+    // Si Android y dismiss -> cerrar sin hacer cambios
+    if (Platform.OS === "android") {
+      if (event?.type === "dismissed") {
+        setShowPicker(false);
+        setPickerInfo(null);
+        return;
+      }
+    }
+
+    const date = selectedDate || tempTime;
+    if (!date) {
+      setShowPicker(false);
+      setPickerInfo(null);
+      return;
+    }
+
+    const { dia, tipo } = pickerInfo;
+    const hours = date.getHours().toString().padStart(2, "0");
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+    const formattedTime = `${hours}:${minutes}`;
+
+    setForm((prev) => ({
+      ...prev,
+      horarios: {
+        ...prev.horarios,
+        [dia]: {
+          ...prev.horarios[dia as keyof typeof prev.horarios],
+          [tipo]: formattedTime,
+        },
+      },
+    }));
+
+    // cerrar picker en ambas plataformas (evita doble evento)
+    setShowPicker(false);
+    setPickerInfo(null);
   };
 
   const openTimePicker = (dia: string, tipo: "apertura" | "cierre", currentTime: string) => {
@@ -338,11 +357,10 @@ export default function RegistroEstacionamiento() {
         }
       }
 
-      // Construir horarios en la forma esperada por la API (ej: "Lunes")
       const horariosParaBackend = diasSemana.map(({ key, label }) => {
         const horario = form.horarios[key as keyof typeof form.horarios];
         return {
-          diaSemana: label, // ej. "Lunes"
+          diaSemana: label.toUpperCase(),
           horaAbrir: horario.abierto ? horario.apertura : "00:00",
           horaCerrar: horario.abierto ? horario.cierre : "00:00",
           esCerrado: !horario.abierto,
@@ -608,7 +626,7 @@ export default function RegistroEstacionamiento() {
     </ScrollView>
   );
 
-  // Página 2 — Horarios (SIN resumen)
+  // Página 2 — Horarios
   const renderPagina2 = () => (
     <ScrollView
       className="flex-1 px-5 py-8"
@@ -681,7 +699,21 @@ export default function RegistroEstacionamiento() {
         );
       })}
 
-      {/* Nota: se eliminó el resumen visual aquí por petición */}
+      {/* Resumen */}
+      <View style={{ backgroundColor: "white", borderRadius: 10, padding: 12, marginTop: 8 }}>
+        <Text style={{ fontSize: 16, fontWeight: "700", textAlign: "center", color: "#B2A83F", marginBottom: 8 }}>Resumen de Horarios</Text>
+        {diasSemana.map(({ key, label }) => {
+          const horario = form.horarios[key as keyof typeof form.horarios];
+          return (
+            <View key={key} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 2 }}>
+              <Text style={{ textTransform: "capitalize" }}>{label}:</Text>
+              <Text style={{ color: horario.abierto ? "#16a34a" : "#dc2626" }}>
+                {horario.abierto ? `${horario.apertura} - ${horario.cierre}` : "Cerrado"}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
 
       <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 16, marginBottom: Math.max(6, insets.bottom) }}>
         <Button mode="outlined" onPress={() => setPagina(1)} style={{ borderColor: "#FD721D", width: "48%" }} labelStyle={{ color: "#FD721D" }}>

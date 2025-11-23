@@ -1,26 +1,26 @@
 // screens/RegistroEstacionamiento.tsx
 import { MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
+  Platform,
   ScrollView,
   Switch,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Platform,
 } from "react-native";
 import MapView, { MapPressEvent, Marker } from "react-native-maps";
 import { Button, Checkbox } from "react-native-paper";
-import Logo from "../../assets/Logo";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Logo from "../../assets/Logo";
 
 /**
  * RUTAS LOCALES A LOS PDF SUBIDOS (referencia)
@@ -129,17 +129,32 @@ export default function RegistroEstacionamiento() {
     });
   };
 
-  // Horarios picker
+  // Horarios picker - CORREGIDO para Android/iOS
   const handleTimeChange = (event: any, selectedDate?: Date) => {
-    // En Android suele recibir event; en iOS selectedDate puede ser undefined si cancela
-    setShowPicker(false);
+    // Debug opcional:
+    // console.log("DateTimePicker event:", event, "selectedDate:", selectedDate);
 
-    if (selectedDate && pickerInfo) {
-      const { dia, tipo } = pickerInfo;
-      const hours = selectedDate.getHours().toString().padStart(2, "0");
-      const minutes = selectedDate.getMinutes().toString().padStart(2, "0");
+    // Android: event.type === 'dismissed' o 'set'
+    if (Platform.OS === "android") {
+      if (event?.type === "dismissed") {
+        setShowPicker(false);
+        return;
+      }
+
+      // Puede venir la fecha en selectedDate o en event.nativeEvent.timestamp
+      const timestamp =
+        selectedDate ??
+        (event?.nativeEvent?.timestamp ? new Date(event.nativeEvent.timestamp) : undefined);
+
+      setShowPicker(false); // cerramos el picker en Android después del evento
+
+      if (!timestamp || !pickerInfo) return;
+
+      const hours = timestamp.getHours().toString().padStart(2, "0");
+      const minutes = timestamp.getMinutes().toString().padStart(2, "0");
       const formattedTime = `${hours}:${minutes}`;
 
+      const { dia, tipo } = pickerInfo;
       setForm((prev) => ({
         ...prev,
         horarios: {
@@ -150,7 +165,34 @@ export default function RegistroEstacionamiento() {
           },
         },
       }));
+
+      return;
     }
+
+    // iOS (y otras plataformas): selectedDate es undefined si canceló
+    if (!selectedDate) {
+      // usuario canceló
+      return;
+    }
+
+    setShowPicker(false);
+    if (!pickerInfo) return;
+
+    const hours = selectedDate.getHours().toString().padStart(2, "0");
+    const minutes = selectedDate.getMinutes().toString().padStart(2, "0");
+    const formattedTime = `${hours}:${minutes}`;
+
+    const { dia, tipo } = pickerInfo;
+    setForm((prev) => ({
+      ...prev,
+      horarios: {
+        ...prev.horarios,
+        [dia]: {
+          ...prev.horarios[dia as keyof typeof prev.horarios],
+          [tipo]: formattedTime,
+        },
+      },
+    }));
   };
 
   const openTimePicker = (dia: string, tipo: "apertura" | "cierre", currentTime: string) => {
@@ -248,10 +290,11 @@ export default function RegistroEstacionamiento() {
         }
       }
 
+      // Construir horarios en la forma esperada por la API (ej: "Lunes")
       const horariosParaBackend = diasSemana.map(({ key, label }) => {
         const horario = form.horarios[key as keyof typeof form.horarios];
         return {
-          diaSemana: label.toUpperCase(),
+          diaSemana: label, // ej. "Lunes"
           horaAbrir: horario.abierto ? horario.apertura : "00:00",
           horaCerrar: horario.abierto ? horario.cierre : "00:00",
           esCerrado: !horario.abierto,
@@ -508,7 +551,7 @@ export default function RegistroEstacionamiento() {
     </ScrollView>
   );
 
-  // Página 2 — Horarios
+  // Página 2 — Horarios (SIN resumen)
   const renderPagina2 = () => (
     <ScrollView
       className="flex-1 px-5 py-8"
@@ -581,21 +624,7 @@ export default function RegistroEstacionamiento() {
         );
       })}
 
-      {/* Resumen */}
-      <View style={{ backgroundColor: "white", borderRadius: 10, padding: 12, marginTop: 8 }}>
-        <Text style={{ fontSize: 16, fontWeight: "700", textAlign: "center", color: "#B2A83F", marginBottom: 8 }}>Resumen de Horarios</Text>
-        {diasSemana.map(({ key, label }) => {
-          const horario = form.horarios[key as keyof typeof form.horarios];
-          return (
-            <View key={key} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 2 }}>
-              <Text style={{ textTransform: "capitalize" }}>{label}:</Text>
-              <Text style={{ color: horario.abierto ? "#16a34a" : "#dc2626" }}>
-                {horario.abierto ? `${horario.apertura} - ${horario.cierre}` : "Cerrado"}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
+      {/* Nota: se eliminó el resumen visual aquí por petición */}
 
       <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 16, marginBottom: Math.max(6, insets.bottom) }}>
         <Button mode="outlined" onPress={() => setPagina(1)} style={{ borderColor: "#FD721D", width: "48%" }} labelStyle={{ color: "#FD721D" }}>

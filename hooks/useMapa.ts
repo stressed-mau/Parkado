@@ -9,18 +9,37 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Coords, ParqueoParaVista } from '../types/mapa';
 import { API_URL, INITIAL_DELTA, COCHABAMBA_REGION } from '../constants/mapa';
 
-/**
- * Hook useMapa (completo y corregido)
- * - Agrega listener para evento 'parqueoCreated'
- * - Fallback por AsyncStorage para recargar cuando la pantalla gana foco
- * - transformaciones defensivas a la nueva API
- * - **Sin WebSocket**: ahora sólo se obtiene la lista desde API_URL
- */
+// Hook personalizado para verificar montaje
+const useIsMounted = () => {
+  const isMounted = useRef(true);
+  
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+  
+  return isMounted;
+};
+
+// Utilidad para validar coordenadas
+const isValidCoordinate = (coord: Coords): boolean => {
+  return (
+    coord != null &&
+    typeof coord.latitude === 'number' &&
+    typeof coord.longitude === 'number' &&
+    !isNaN(coord.latitude) &&
+    !isNaN(coord.longitude) &&
+    Math.abs(coord.latitude) <= 90 &&
+    Math.abs(coord.longitude) <= 180
+  );
+};
 
 export const useMapa = () => {
   const params = useLocalSearchParams<{ destLat?: string; destLng?: string; destNombre?: string }>();
   const router = useRouter();
   const mapRef = useRef<any>(null);
+  const isMounted = useIsMounted();
 
   // Estados
   const [region, setRegion] = useState<Region | null>(COCHABAMBA_REGION);
@@ -38,9 +57,42 @@ export const useMapa = () => {
   const [isLocating, setIsLocating] = useState(false);
 
   // -------------------------
+  // Utilidades seguras para el mapa
+  // -------------------------
+  const safeAnimateToRegion = useCallback((region: Region, duration = 500) => {
+    if (mapRef.current?.animateToRegion && typeof mapRef.current.animateToRegion === 'function') {
+      try {
+        mapRef.current.animateToRegion(region, duration);
+      } catch (err) {
+        console.warn('animateToRegion falló:', err);
+      }
+    }
+  }, []);
+
+  const safeFitToCoordinates = useCallback((coordinates: Coords[], options: any) => {
+    if (mapRef.current?.fitToCoordinates && typeof mapRef.current.fitToCoordinates === 'function') {
+      try {
+        mapRef.current.fitToCoordinates(coordinates, options);
+      } catch (err) {
+        console.warn('fitToCoordinates falló:', err);
+      }
+    }
+  }, []);
+
+  const safeAnimateCamera = useCallback((camera: any, options: any) => {
+    if (mapRef.current?.animateCamera && typeof mapRef.current.animateCamera === 'function') {
+      try {
+        mapRef.current.animateCamera(camera, options);
+      } catch (err) {
+        console.warn('animateCamera falló:', err);
+      }
+    }
+  }, []);
+
+  // -------------------------
   // transformarParqueo: adaptado a la nueva estructura del backend
   // -------------------------
-  const transformarParqueo = (p: any): ParqueoParaVista | null => {
+  const transformarParqueo = useCallback((p: any): ParqueoParaVista | null => {
     if (!p || typeof p !== 'object') return null;
 
     // Soportar distintas formas de naming
@@ -83,21 +135,26 @@ export const useMapa = () => {
       rating: Number(rAvg.toFixed(1)),
       disponible: !!disp,
     } as ParqueoParaVista;
-  };
+  }, []);
 
   // -------------------------
   // fetchParqueos / reloadParqueos: obtiene lista desde API y transforma
   // -------------------------
   const fetchParqueos = useCallback(async () => {
+    if (!isMounted.current) return [];
+    
     console.log('fetchParqueos: start');
     setIsLoadingApi(true);
+    
     try {
       const response = await axios.get(API_URL);
       const remote = response?.data;
 
       if (!Array.isArray(remote)) {
         console.warn('Respuesta API parqueos no es array:', remote);
-        setParqueos([]);
+        if (isMounted.current) {
+          setParqueos([]);
+        }
         return [];
       }
 
@@ -105,17 +162,24 @@ export const useMapa = () => {
         .map(transformarParqueo)
         .filter((p: ParqueoParaVista | null): p is ParqueoParaVista => p !== null);
 
-      setParqueos(datosTransformados);
+      if (isMounted.current) {
+        setParqueos(datosTransformados);
+      }
+      
       console.log('fetchParqueos: end, count=', datosTransformados.length);
       return datosTransformados;
     } catch (e: any) {
       console.error('Error cargando parqueos:', e);
-      setErrorMsg('Error cargando parqueos. Revisa tu conexión.');
+      if (isMounted.current) {
+        setErrorMsg('Error cargando parqueos. Revisa tu conexión.');
+      }
       return [];
     } finally {
-      setIsLoadingApi(false);
+      if (isMounted.current) {
+        setIsLoadingApi(false);
+      }
     }
-  }, []);
+  }, [isMounted, transformarParqueo]);
 
   // reloadParqueos — alias explícito para ser llamado desde fuera (POST)
   const reloadParqueos = useCallback(async () => {
@@ -137,11 +201,11 @@ export const useMapa = () => {
         await fetchParqueos();
         // opcional: intentar centrar si se guardó coords en AsyncStorage
         const coordsStr = await AsyncStorage.getItem('parkado_last_coords');
-        if (coordsStr) {
+        if (coordsStr && isMounted.current) {
           try {
             const parsed = JSON.parse(coordsStr);
-            if (parsed?.latitude && parsed?.longitude && mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
-              mapRef.current.animateToRegion({
+            if (parsed?.latitude && parsed?.longitude) {
+              safeAnimateToRegion({
                 latitude: Number(parsed.latitude),
                 longitude: Number(parsed.longitude),
                 latitudeDelta: 0.01,
@@ -160,9 +224,13 @@ export const useMapa = () => {
     });
 
     return () => {
-      try { sub.remove(); } catch (err) { /* ignore */ }
+      try { 
+        sub.remove(); 
+      } catch (err) { 
+        console.warn('Error removiendo DeviceEventEmitter listener:', err);
+      }
     };
-  }, [fetchParqueos]);
+  }, [fetchParqueos, isMounted, safeAnimateToRegion]);
 
   // Fallback: cuando la pantalla gana foco, chequeamos flag en AsyncStorage
   useFocusEffect(
@@ -172,19 +240,21 @@ export const useMapa = () => {
       const checkFlag = async () => {
         try {
           const flag = await AsyncStorage.getItem('parkado_needs_reload');
-          if (!mounted) return;
+          if (!mounted || !isMounted.current) return;
+          
           if (flag === '1') {
             console.log('Flag found parkado_needs_reload -> recargando parqueos');
             await fetchParqueos();
             await AsyncStorage.removeItem('parkado_needs_reload');
             console.log('Flag removed parkado_needs_reload');
+            
             // también intentar centrar en coords si existen
             const coordsStr = await AsyncStorage.getItem('parkado_last_coords');
             if (coordsStr) {
               try {
                 const parsed = JSON.parse(coordsStr);
-                if (parsed?.latitude && parsed?.longitude && mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
-                  mapRef.current.animateToRegion({
+                if (parsed?.latitude && parsed?.longitude) {
+                  safeAnimateToRegion({
                     latitude: Number(parsed.latitude),
                     longitude: Number(parsed.longitude),
                     latitudeDelta: 0.01,
@@ -207,23 +277,25 @@ export const useMapa = () => {
       return () => {
         mounted = false;
       };
-    }, [fetchParqueos])
+    }, [fetchParqueos, isMounted, safeAnimateToRegion])
   );
 
   // -------------------------
   // Permisos y ubicación inicial
   // -------------------------
   useEffect(() => {
-    let isMounted = true;
-
     (async () => {
+      if (!isMounted.current) return;
+      
       setIsLocationLoading(true);
       setErrorMsg(null);
 
       try {
         const servicesEnabled = await Location.hasServicesEnabledAsync();
         if (!servicesEnabled) {
-          setErrorMsg('Los servicios de ubicación están desactivados. Actívalos en ajustes del dispositivo.');
+          if (isMounted.current) {
+            setErrorMsg('Los servicios de ubicación están desactivados. Actívalos en ajustes del dispositivo.');
+          }
           return;
         }
 
@@ -234,7 +306,9 @@ export const useMapa = () => {
         }
 
         if (status !== 'granted') {
-          setErrorMsg('Permiso de ubicación denegado. Actívalo en ajustes de la app.');
+          if (isMounted.current) {
+            setErrorMsg('Permiso de ubicación denegado. Actívalo en ajustes de la app.');
+          }
           return;
         }
 
@@ -248,31 +322,22 @@ export const useMapa = () => {
           longitude: location.coords.longitude,
         };
 
-        if (isMounted) {
+        if (isMounted.current) {
           setUserLocation(coords);
           setErrorMsg(null);
 
-          if (mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
-            const newRegion = {
-              ...coords,
-              latitudeDelta: INITIAL_DELTA,
-              longitudeDelta: INITIAL_DELTA,
-            };
-            try {
-              mapRef.current.animateToRegion(newRegion, 500);
-              setRegion(newRegion);
-            } catch (err) {
-              console.warn('animateToRegion falló durante ubicación inicial:', err);
-            }
-          } else {
-            setRegion({
-              ...coords,
-              latitudeDelta: INITIAL_DELTA,
-              longitudeDelta: INITIAL_DELTA,
-            });
-          }
+          const newRegion = {
+            ...coords,
+            latitudeDelta: INITIAL_DELTA,
+            longitudeDelta: INITIAL_DELTA,
+          };
+          
+          safeAnimateToRegion(newRegion, 500);
+          setRegion(newRegion);
         }
       } catch (error: any) {
+        if (!isMounted.current) return;
+        
         let errorMessage = 'No se pudo obtener tu ubicación actual. ';
         if (error?.code === 'CANCELLED') {
           errorMessage += 'La solicitud fue cancelada.';
@@ -285,91 +350,99 @@ export const useMapa = () => {
         }
         setErrorMsg(errorMessage);
       } finally {
-        if (isMounted) setIsLocationLoading(false);
+        if (isMounted.current) {
+          setIsLocationLoading(false);
+        }
       }
     })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  }, [isMounted, safeAnimateToRegion]);
 
   // -------------------------
-  // fetchRoute (OSRM)
+  // fetchRoute (OSRM) - CORREGIDO
   // -------------------------
   const fetchRoute = useCallback(
-  async (origin: Coords, destinationCoords: Coords, destNombre?: string) => {
-    setIsLoadingRoute(true);
-    setRouteCoordinates([]);
-    setShowDirections(false);
+    async (origin: Coords, destinationCoords: Coords, destNombre?: string) => {
+      if (!isMounted.current) return;
 
-    console.log("🌍 Fetching route...");
-    console.log("🛣️ Origen: ", origin);
-    console.log("📍 Destino: ", destinationCoords);
-
-    try {
-      const url = `https://router.project-osrm.org/route/v1/driving/${origin.longitude},${origin.latitude};${destinationCoords.longitude},${destinationCoords.latitude}?overview=full&geometries=geojson`;
-      console.log("🌐 URL:", url);  // Log de la URL para verificar que la consulta es correcta
-
-      const response = await axios.get(url);
-
-      console.log("🚀 Response: ", response); // Verifica la respuesta completa de la API
-
-      if (!response?.data || !Array.isArray(response.data.routes) || response.data.routes.length === 0) {
-        throw new Error('No se encontró ruta disponible');
+      // Validar coordenadas antes de proceder
+      if (!isValidCoordinate(origin) || !isValidCoordinate(destinationCoords)) {
+        Alert.alert('Error', 'Coordenadas inválidas para calcular la ruta');
+        return;
       }
 
-      const geo = response.data.routes[0]?.geometry;
-      console.log("🗺️ Ruta encontrada: ", geo);
-
-      if (!geo || !Array.isArray(geo.coordinates)) {
-        throw new Error('Formato de ruta inesperado');
-      }
-
-      const coordinates = geo.coordinates
-        .map((coord: any) => {
-          if (!Array.isArray(coord) || coord.length < 2) return null;
-          const lat = Number(coord[1]);
-          const lng = Number(coord[0]);
-          if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
-          return { latitude: lat, longitude: lng };
-        })
-        .filter((c: any) => c !== null);
-
-      console.log("📍 Coordenadas de la ruta: ", coordinates);  // Verifica las coordenadas de la ruta
-
-      setRouteCoordinates(coordinates as Coords[]);
-      setShowDirections(true);
-
-      if (mapRef.current && typeof mapRef.current.fitToCoordinates === 'function') {
-        try {
-          mapRef.current.fitToCoordinates([origin, destinationCoords], {
-            edgePadding: { top: 100, right: 50, bottom: 100, left: 50 },
-            animated: true,
-          });
-        } catch (err) {
-          console.warn('fitToCoordinates falló:', err);
-        }
-      } else {
-        console.warn('fitToCoordinates no disponible en mapRef.current');
-      }
-    } catch (error: any) {
-      Alert.alert('Error', `No se pudo trazar la ruta${destNombre ? ` a ${destNombre}` : ''}.`);
+      setIsLoadingRoute(true);
+      setRouteCoordinates([]);
       setShowDirections(false);
-      console.error('Error fetchRoute:', error);
-    } finally {
-      setIsLoadingRoute(false);
-    }
-  },
-  []
-);
 
+      console.log("🌍 Fetching route...");
+      console.log("🛣️ Origen: ", origin);
+      console.log("📍 Destino: ", destinationCoords);
 
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${origin.longitude},${origin.latitude};${destinationCoords.longitude},${destinationCoords.latitude}?overview=full&geometries=geojson`;
+        console.log("🌐 URL:", url);
+
+        const response = await axios.get(url);
+        
+        if (!isMounted.current) return;
+
+        console.log("🚀 Response: ", response);
+
+        if (!response?.data || !Array.isArray(response.data.routes) || response.data.routes.length === 0) {
+          throw new Error('No se encontró ruta disponible');
+        }
+
+        const geo = response.data.routes[0]?.geometry;
+        console.log("🗺️ Ruta encontrada: ", geo);
+
+        if (!geo || !Array.isArray(geo.coordinates)) {
+          throw new Error('Formato de ruta inesperado');
+        }
+
+        const coordinates = geo.coordinates
+          .map((coord: any) => {
+            if (!Array.isArray(coord) || coord.length < 2) return null;
+            const lat = Number(coord[1]);
+            const lng = Number(coord[0]);
+            if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+            return { latitude: lat, longitude: lng };
+          })
+          .filter((c: any) => c !== null);
+
+        console.log("📍 Coordenadas de la ruta: ", coordinates);
+
+        if (isMounted.current) {
+          setRouteCoordinates(coordinates as Coords[]);
+          setShowDirections(true);
+        }
+
+        // Usar utilidad segura para el mapa
+        safeFitToCoordinates([origin, destinationCoords], {
+          edgePadding: { top: 100, right: 50, bottom: 100, left: 50 },
+          animated: true,
+        });
+
+      } catch (error: any) {
+        if (!isMounted.current) return;
+        
+        Alert.alert('Error', `No se pudo trazar la ruta${destNombre ? ` a ${destNombre}` : ''}.`);
+        setShowDirections(false);
+        console.error('Error fetchRoute:', error);
+      } finally {
+        if (isMounted.current) {
+          setIsLoadingRoute(false);
+        }
+      }
+    },
+    [isMounted, safeFitToCoordinates]
+  );
 
   // -------------------------
   // UI actions: centrar, zoom, marker press, clear, show directions
   // -------------------------
   const handleCenterOnUser = useCallback(async () => {
+    if (!isMounted.current) return;
+    
     setIsLocating(true);
     setErrorMsg(null);
 
@@ -402,37 +475,25 @@ export const useMapa = () => {
         longitude: location.coords.longitude,
       };
 
-      setUserLocation(newCoords);
-      setErrorMsg(null);
+      if (isMounted.current) {
+        setUserLocation(newCoords);
+        setErrorMsg(null);
+      }
 
-      if (mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
-        try {
-          mapRef.current.animateToRegion(
-            {
-              ...newCoords,
-              latitudeDelta: INITIAL_DELTA,
-              longitudeDelta: INITIAL_DELTA,
-            },
-            1000
-          );
-          setRegion({
-            ...newCoords,
-            latitudeDelta: INITIAL_DELTA,
-            longitudeDelta: INITIAL_DELTA,
-          });
-        } catch (err) {
-          console.warn('animateToRegion falló al centrar en el usuario:', err);
-        }
-      } else if (mapRef.current && typeof mapRef.current.animateCamera === 'function') {
-        try {
-          mapRef.current.animateCamera({ center: newCoords, pitch: 0, heading: 0, altitude: 0 }, { duration: 1000 });
-        } catch (err) {
-          console.warn('animateCamera falló al centrar en el usuario:', err);
-        }
-      } else {
-        setRegion({ ...newCoords, latitudeDelta: INITIAL_DELTA, longitudeDelta: INITIAL_DELTA });
+      const newRegion = {
+        ...newCoords,
+        latitudeDelta: INITIAL_DELTA,
+        longitudeDelta: INITIAL_DELTA,
+      };
+
+      safeAnimateToRegion(newRegion, 1000);
+      
+      if (isMounted.current) {
+        setRegion(newRegion);
       }
     } catch (error: any) {
+      if (!isMounted.current) return;
+      
       let errorMessage = 'No se pudo obtener tu ubicación actual. ';
       if (error?.code === 'CANCELLED') {
         errorMessage += 'La solicitud fue cancelada.';
@@ -446,65 +507,64 @@ export const useMapa = () => {
       setErrorMsg(errorMessage);
       Alert.alert('Error de ubicación', errorMessage);
     } finally {
-      setIsLocating(false);
+      if (isMounted.current) {
+        setIsLocating(false);
+      }
     }
-  }, [userLocation]);
+  }, [isMounted, safeAnimateToRegion]);
 
   const handleZoom = useCallback(
     (factor: number) => {
-      if (!region) return;
+      if (!region || !isMounted.current) return;
+      
       const newR: Region = {
         ...region,
         latitudeDelta: region.latitudeDelta * factor,
         longitudeDelta: region.longitudeDelta * factor,
       };
 
-      if (mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
-        try {
-          mapRef.current.animateToRegion(newR, 300);
-        } catch (err) {
-          console.warn('animateToRegion falló en handleZoom:', err);
-        }
-      } else {
+      safeAnimateToRegion(newR, 300);
+      
+      if (isMounted.current) {
         setRegion(newR);
       }
     },
-    [region]
+    [region, isMounted, safeAnimateToRegion]
   );
 
   const handleMarkerPress = useCallback(
     (parqueo: ParqueoParaVista) => {
+      if (!isMounted.current) return;
+      
       setSelectedParking(parqueo);
       setShowDirections(false);
       setRouteCoordinates([]);
 
-      if (region && mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
-        try {
-          mapRef.current.animateToRegion(
-            {
-              latitude: parqueo.latitud,
-              longitude: parqueo.longitud,
-              latitudeDelta: region.latitudeDelta,
-              longitudeDelta: region.longitudeDelta,
-            },
-            500
-          );
-        } catch (err) {
-          console.warn('animateToRegion falló al pulsar marcador:', err);
-        }
+      if (region) {
+        safeAnimateToRegion(
+          {
+            latitude: parqueo.latitud,
+            longitude: parqueo.longitud,
+            latitudeDelta: region.latitudeDelta,
+            longitudeDelta: region.longitudeDelta,
+          },
+          500
+        );
       } else {
         setRegion({
           latitude: parqueo.latitud,
           longitude: parqueo.longitud,
-          latitudeDelta: region?.latitudeDelta ?? INITIAL_DELTA,
-          longitudeDelta: region?.longitudeDelta ?? INITIAL_DELTA,
+          latitudeDelta: INITIAL_DELTA,
+          longitudeDelta: INITIAL_DELTA,
         });
       }
     },
-    [region]
+    [region, isMounted, safeAnimateToRegion]
   );
 
   const handleClearSelection = useCallback(() => {
+    if (!isMounted.current) return;
+    
     setSelectedParking(null);
     setDestination(null);
     setDestinationName(null);
@@ -520,38 +580,31 @@ export const useMapa = () => {
       });
     }
 
-    if (userLocation && mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
-      try {
-        mapRef.current.animateToRegion(
-          {
-            ...userLocation,
-            latitudeDelta: INITIAL_DELTA,
-            longitudeDelta: INITIAL_DELTA,
-          },
-          300
-        );
-      } catch (err) {
-        console.warn('animateToRegion falló en clearSelection (userLocation):', err);
-      }
-    } else if (mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
-      try {
-        mapRef.current.animateToRegion(COCHABAMBA_REGION, 300);
-      } catch (err) {
-        console.warn('animateToRegion falló en clearSelection (COCHABAMBA_REGION):', err);
-      }
+    if (userLocation) {
+      safeAnimateToRegion(
+        {
+          ...userLocation,
+          latitudeDelta: INITIAL_DELTA,
+          longitudeDelta: INITIAL_DELTA,
+        },
+        300
+      );
     } else {
-      setRegion(COCHABAMBA_REGION);
+      safeAnimateToRegion(COCHABAMBA_REGION, 300);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userLocation, params]);
+  }, [userLocation, params, router, isMounted, safeAnimateToRegion]);
 
   const cerrarSoloPopup = useCallback(() => {
-    setSelectedParking(null);
-  }, []);
+    if (isMounted.current) {
+      setSelectedParking(null);
+    }
+  }, [isMounted]);
 
   const handleShowDirectionsFromPopup = useCallback(
     (coords: { latitude: number; longitude: number; name: string }) => {
-      if (userLocation) {
+      if (!isMounted.current) return;
+      
+      if (userLocation && isValidCoordinate(userLocation)) {
         setDestination({ latitude: coords.latitude, longitude: coords.longitude });
         setDestinationName(coords.name);
         setSelectedParking(null);
@@ -565,48 +618,72 @@ export const useMapa = () => {
         );
       }
     },
-    [userLocation, fetchRoute]
+    [userLocation, fetchRoute, isMounted]
   );
 
-// Cuando venimos desde otra pantalla con destLat/destLng en la URL (desde "Ver Ruta")
-useEffect(() => {
-  // si no vienen coords en los params, no hacemos nada
-  if (!params.destLat || !params.destLng) return;
-  // si todavía NO tenemos userLocation, esperamos sin mostrar alerta
-  if (!userLocation) return;
+  // Cuando venimos desde otra pantalla con destLat/destLng en la URL (desde "Ver Ruta")
+  useEffect(() => {
+    // si no vienen coords en los params, no hacemos nada
+    if (!params.destLat || !params.destLng) return;
+    // si todavía NO tenemos userLocation, esperamos sin mostrar alerta
+    if (!userLocation) return;
 
-  const lat = Number(params.destLat);
-  const lng = Number(params.destLng);
+    const lat = Number(params.destLat);
+    const lng = Number(params.destLng);
 
-  if (Number.isNaN(lat) || Number.isNaN(lng)) {
-    console.warn('❌ destLat/destLng no son números válidos', params.destLat, params.destLng);
-    return;
-  }
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      console.warn('❌ destLat/destLng no son números válidos', params.destLat, params.destLng);
+      return;
+    }
 
-  const destCoords: Coords = { latitude: lat, longitude: lng };
+    const destCoords: Coords = { latitude: lat, longitude: lng };
 
-  setDestination(destCoords);
-  setDestinationName(params.destNombre ?? null);
-  setRouteCoordinates([]);
-  setShowDirections(false);
+    // Validar coordenadas antes de proceder
+    if (!isValidCoordinate(userLocation) || !isValidCoordinate(destCoords)) {
+      console.warn('❌ Coordenadas inválidas para calcular ruta');
+      return;
+    }
 
-  console.log("🚗  Auto-trazando ruta desde params del navegador...");
-  console.log("📍 ORIGEN:", userLocation);
-  console.log("🏁 DESTINO:", destCoords);
+    if (isMounted.current) {
+      setDestination(destCoords);
+      setDestinationName(params.destNombre ?? null);
+      setRouteCoordinates([]);
+      setShowDirections(false);
+    }
 
-  fetchRoute(userLocation, destCoords, params.destNombre ?? undefined);
-}, [params.destLat, params.destLng, params.destNombre, userLocation, fetchRoute]);
+    console.log("🚗  Auto-trazando ruta desde params del navegador...");
+    console.log("📍 ORIGEN:", userLocation);
+    console.log("🏁 DESTINO:", destCoords);
 
+    fetchRoute(userLocation, destCoords, params.destNombre ?? undefined);
+  }, [params.destLat, params.destLng, params.destNombre, userLocation, fetchRoute, isMounted]);
 
+  const refreshPopupIfOpen = useCallback(async (parqueoId: number) => {
+    if (!isMounted.current) return;
+    
+    try {
+      if (!selectedParking) return;
+      if (selectedParking.id !== parqueoId) return; // ✅ Comparación estricta
+
+      console.log("🔄 Refrescando datos del popup: ", parqueoId);
+
+      // ✅ Usar API_URL base en lugar de URL hardcodeada
+      const response = await axios.get(`${API_URL}/${parqueoId}`);
+
+      const nuevo = transformarParqueo(response.data);
+      if (nuevo && isMounted.current) {
+        setSelectedParking(nuevo);
+      }
+    } catch (e) {
+      console.warn("Error refrescando popup:", e);
+    }
+  }, [selectedParking, transformarParqueo, isMounted]);
 
   // -------------------------
   // Retorno del hook (incluye reloadParqueos)
   // -------------------------
   return {
-    // Refs
     mapRef,
-
-    // State
     region,
     userLocation,
     errorMsg,
@@ -632,7 +709,8 @@ useEffect(() => {
     cerrarSoloPopup,
 
     // Utilities
-    fetchParqueos, // para uso interno si lo necesitás
-    reloadParqueos, // <-- LLAMA ESTO DESPUÉS DEL POST PARA RECARGAR EL MAPA
+    fetchParqueos,
+    reloadParqueos,
+    refreshPopupIfOpen,
   };
 };

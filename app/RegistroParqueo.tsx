@@ -21,9 +21,13 @@ import {
 import MapView, { MapPressEvent, Marker } from "react-native-maps";
 import { Button, Checkbox } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Logo from "../../assets/Logo";
+import Logo from "../assets/Logo";
 
-export default function RegistroEstacionamiento() {
+type RegistroEstacionamientoProps = {
+  onClose?: () => void; // 👈 para usar inline y poder volver
+};
+
+export default function RegistroEstacionamiento({ onClose }: RegistroEstacionamientoProps) {
   const insets = useSafeAreaInsets();
   const [pagina, setPagina] = useState(1);
 
@@ -114,13 +118,11 @@ export default function RegistroEstacionamiento() {
 
     // Nombre: sin caracteres especiales, máximo 16 caracteres.
     if (key === "nombre") {
-      // Permitir letras (incluye acentos y ñ), números y espacios.
-      // El flag u y \p{L} permiten letras Unicode.
-      const cleaned = newValue.replace(/[^\p{L}\p{N} ]/gu, ""); // elimina caracteres especiales
-      newValue = cleaned.slice(0, 16); // máximo 16 caracteres
+      const cleaned = newValue.replace(/[^\p{L}\p{N} ]/gu, "");
+      newValue = cleaned.slice(0, 16);
     }
 
-    // Teléfono: sólo dígitos y máximo 8 (ya existente)
+    // Teléfono: sólo dígitos y máximo 8
     if (key === "telefono") {
       newValue = value.replace(/\D/g, "").slice(0, 8);
     }
@@ -131,7 +133,6 @@ export default function RegistroEstacionamiento() {
     }
 
     // Tarifas: sólo dígitos, máximo 2 caracteres (0-99)
-    // Si quieres permitir decimales, habría que cambiar esto. Por ahora: enteros.
     if (
       key === "tarifaAutos" ||
       key === "tarifaMotos" ||
@@ -156,15 +157,11 @@ export default function RegistroEstacionamiento() {
 
   // Horarios picker
   const handleTimeChange = (event: any, selectedDate?: Date) => {
-    // Android: event.type puede ser 'set' o 'dismissed'
-    // iOS: no viene event.type de la misma forma, selectedDate suele estar presente
     if (!pickerInfo) {
-      // seguridad
       setShowPicker(false);
       return;
     }
 
-    // Si Android y dismiss -> cerrar sin hacer cambios
     if (Platform.OS === "android") {
       if (event?.type === "dismissed") {
         setShowPicker(false);
@@ -196,7 +193,6 @@ export default function RegistroEstacionamiento() {
       },
     }));
 
-    // cerrar picker en ambas plataformas (evita doble evento)
     setShowPicker(false);
     setPickerInfo(null);
   };
@@ -265,7 +261,6 @@ export default function RegistroEstacionamiento() {
 
   // Validaciones antes de enviar
   const validarAntesDeEnviar = () => {
-    // Nombre
     const nombre = (form.nombre || "").trim();
     if (!nombre) {
       Alert.alert("Nombre requerido", "Ingresa el nombre del estacionamiento.");
@@ -275,20 +270,17 @@ export default function RegistroEstacionamiento() {
       Alert.alert("Nombre inválido", "El nombre debe tener máximo 16 caracteres.");
       return false;
     }
-    // regex: sólo letras (unicode), números y espacios
     const nombreValido = /^[\p{L}\p{N} ]+$/u.test(nombre);
     if (!nombreValido) {
       Alert.alert("Nombre inválido", "El nombre no debe contener caracteres especiales.");
       return false;
     }
 
-    // Ubicación
     if (!form.latitud || !form.longitud) {
       Alert.alert("Ubicación requerida", "Selecciona la ubicación en el mapa.");
       return false;
     }
 
-    // Capacidades (si se ingresaron) max 2 dígitos
     const camposCapacidad = ["capacidadAutos", "capacidadMotos"] as const;
     for (const key of camposCapacidad) {
       const val = (form as any)[key];
@@ -298,7 +290,6 @@ export default function RegistroEstacionamiento() {
       }
     }
 
-    // Tarifas max 2 dígitos y numéricas
     const camposTarifa = ["tarifaAutos", "tarifaMotos", "tarifaAutosDia", "tarifaMotosDia"] as const;
     for (const key of camposTarifa) {
       const val = (form as any)[key];
@@ -308,13 +299,11 @@ export default function RegistroEstacionamiento() {
       }
     }
 
-    // Tipo de lugar
     if (!form.tipoLugar) {
       Alert.alert("Tipo de lugar", "Selecciona el tipo de lugar.");
       return false;
     }
 
-    // Foto y licencia obligatorias
     if (!fotoUri) {
       Alert.alert("Falta foto", "Selecciona una foto de referencia.");
       return false;
@@ -403,7 +392,6 @@ export default function RegistroEstacionamiento() {
         Alert.alert("✅ Éxito", "Parqueo registrado correctamente.");
         setPagina(1);
 
-        // ----> EMITIR EVENTO PARA QUE useMapa RECARGUE LOS PARQUEOS
         try {
           DeviceEventEmitter.emit("parqueoCreated");
         } catch (e) {
@@ -430,6 +418,26 @@ export default function RegistroEstacionamiento() {
       contentContainerStyle={{ paddingBottom: insets.bottom + 6 }}
       keyboardShouldPersistTaps="handled"
     >
+      {/* 🔙 BOTÓN VOLVER (si viene onClose) */}
+      {onClose && (
+        <TouchableOpacity
+          onPress={onClose}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            alignSelf: "flex-start",
+            paddingVertical: 6,
+            paddingHorizontal: 10,
+            borderRadius: 999,
+            backgroundColor: "#7BB3CD",
+            marginBottom: 10,
+          }}
+        >
+          <MaterialIcons name="arrow-back" size={18} color="#fff" />
+          <Text style={{ color: "#fff", marginLeft: 6, fontWeight: "600" }}>Volver</Text>
+        </TouchableOpacity>
+      )}
+
       <Logo />
       <Text className="text-2xl font-bold text-center mb-4" style={{ color: "#F2BD2B" }}>
         REGISTRO DEL ESTACIONAMIENTO
@@ -628,103 +636,146 @@ export default function RegistroEstacionamiento() {
 
   // Página 2 — Horarios
   const renderPagina2 = () => (
-    <ScrollView
-      className="flex-1 px-5 py-8"
-      style={{ backgroundColor: "#F6EEE4" }}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 6 }}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Text className="text-2xl font-bold text-center mb-6" style={{ color: "#F2BD2B" }}>
-        HORARIOS DE ATENCIÓN
-      </Text>
-
-      <Text className="text-sm text-gray-600 text-center mb-6">
-        Establece los horarios en que tu estacionamiento estará abierto
-      </Text>
-
-      {showPicker && pickerInfo && (
-        <DateTimePicker
-          value={tempTime}
-          mode="time"
-          is24Hour={true}
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={handleTimeChange}
-        />
+    <View style={{ flex: 1, backgroundColor: "#F6EEE4" }}>
+      {/* 🔙 BOTÓN VOLVER (si viene onClose) */}
+      {onClose && (
+        <TouchableOpacity
+          onPress={onClose}
+          style={{
+            position: "absolute",
+            top: insets.top + 10,
+            left: 16,
+            zIndex: 50,
+            flexDirection: "row",
+            alignItems: "center",
+            paddingVertical: 6,
+            paddingHorizontal: 10,
+            borderRadius: 999,
+            backgroundColor: "#7BB3CD",
+          }}
+        >
+          <MaterialIcons name="arrow-back" size={18} color="#fff" />
+          <Text style={{ color: "#fff", marginLeft: 6, fontWeight: "600" }}>Volver</Text>
+        </TouchableOpacity>
       )}
 
-      {diasSemana.map(({ key, label }) => {
-        const horario = form.horarios[key as keyof typeof form.horarios];
+      <ScrollView
+        className="flex-1 px-5 py-8"
+        style={{ backgroundColor: "transparent" }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 6, paddingTop: insets.top }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text className="text-2xl font-bold text-center mb-6" style={{ color: "#F2BD2B" }}>
+          HORARIOS DE ATENCIÓN
+        </Text>
 
-        return (
-          <View key={key} style={{ backgroundColor: "white", borderRadius: 10, padding: 12, marginBottom: 10 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <Text style={{ fontSize: 16, fontWeight: "600", color: "#B2A83F" }}>{label}</Text>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Text style={{ marginRight: 8, color: horario.abierto ? "#16a34a" : "#dc2626" }}>{horario.abierto ? "Abierto" : "Cerrado"}</Text>
-                <Switch
-                  value={horario.abierto}
-                  onValueChange={() =>
-                    setForm((prev) => ({
-                      ...prev,
-                      horarios: {
-                        ...prev.horarios,
-                        [key]: {
-                          ...prev.horarios[key as keyof typeof prev.horarios],
-                          abierto: !prev.horarios[key as keyof typeof prev.horarios].abierto,
-                        },
-                      },
-                    }))
-                  }
-                  thumbColor={horario.abierto ? "#7BB3CD" : "#f4f3f4"}
-                />
-              </View>
-            </View>
+        <Text className="text-sm text-gray-600 text-center mb-6">
+          Establece los horarios en que tu estacionamiento estará abierto
+        </Text>
 
-            {horario.abierto ? (
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <TouchableOpacity onPress={() => openTimePicker(key, "apertura", horario.apertura)} style={{ width: "48%", padding: 10, borderRadius: 8, borderWidth: 1, borderColor: "#7BB3CD", backgroundColor: "#EFF9FB" }}>
-                  <Text style={{ fontWeight: "600" }}>Apertura</Text>
-                  <Text style={{ marginTop: 6, fontSize: 16 }}>{horario.apertura}</Text>
-                </TouchableOpacity>
+        {showPicker && pickerInfo && (
+          <DateTimePicker
+            value={tempTime}
+            mode="time"
+            is24Hour={true}
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={handleTimeChange}
+          />
+        )}
 
-                <TouchableOpacity onPress={() => openTimePicker(key, "cierre", horario.cierre)} style={{ width: "48%", padding: 10, borderRadius: 8, borderWidth: 1, borderColor: "#FD721D", backgroundColor: "#FFF7ED" }}>
-                  <Text style={{ fontWeight: "600" }}>Cierre</Text>
-                  <Text style={{ marginTop: 6, fontSize: 16 }}>{horario.cierre}</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <Text style={{ textAlign: "center", color: "#6b7280" }}>Cerrado todo el día</Text>
-            )}
-          </View>
-        );
-      })}
-
-      {/* Resumen */}
-      <View style={{ backgroundColor: "white", borderRadius: 10, padding: 12, marginTop: 8 }}>
-        <Text style={{ fontSize: 16, fontWeight: "700", textAlign: "center", color: "#B2A83F", marginBottom: 8 }}>Resumen de Horarios</Text>
         {diasSemana.map(({ key, label }) => {
           const horario = form.horarios[key as keyof typeof form.horarios];
+
           return (
-            <View key={key} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 2 }}>
-              <Text style={{ textTransform: "capitalize" }}>{label}:</Text>
-              <Text style={{ color: horario.abierto ? "#16a34a" : "#dc2626" }}>
-                {horario.abierto ? `${horario.apertura} - ${horario.cierre}` : "Cerrado"}
-              </Text>
+            <View key={key} style={{ backgroundColor: "white", borderRadius: 10, padding: 12, marginBottom: 10 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <Text style={{ fontSize: 16, fontWeight: "600", color: "#B2A83F" }}>{label}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Text style={{ marginRight: 8, color: horario.abierto ? "#16a34a" : "#dc2626" }}>
+                    {horario.abierto ? "Abierto" : "Cerrado"}
+                  </Text>
+                  <Switch
+                    value={horario.abierto}
+                    onValueChange={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        horarios: {
+                          ...prev.horarios,
+                          [key]: {
+                            ...prev.horarios[key as keyof typeof prev.horarios],
+                            abierto: !prev.horarios[key as keyof typeof prev.horarios].abierto,
+                          },
+                        },
+                      }))
+                    }
+                    thumbColor={horario.abierto ? "#7BB3CD" : "#f4f3f4"}
+                  />
+                </View>
+              </View>
+
+              {horario.abierto ? (
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <TouchableOpacity
+                    onPress={() => openTimePicker(key, "apertura", horario.apertura)}
+                    style={{ width: "48%", padding: 10, borderRadius: 8, borderWidth: 1, borderColor: "#7BB3CD", backgroundColor: "#EFF9FB" }}
+                  >
+                    <Text style={{ fontWeight: "600" }}>Apertura</Text>
+                    <Text style={{ marginTop: 6, fontSize: 16 }}>{horario.apertura}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => openTimePicker(key, "cierre", horario.cierre)}
+                    style={{ width: "48%", padding: 10, borderRadius: 8, borderWidth: 1, borderColor: "#FD721D", backgroundColor: "#FFF7ED" }}
+                  >
+                    <Text style={{ fontWeight: "600" }}>Cierre</Text>
+                    <Text style={{ marginTop: 6, fontSize: 16 }}>{horario.cierre}</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text style={{ textAlign: "center", color: "#6b7280" }}>Cerrado todo el día</Text>
+              )}
             </View>
           );
         })}
-      </View>
 
-      <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 16, marginBottom: Math.max(6, insets.bottom) }}>
-        <Button mode="outlined" onPress={() => setPagina(1)} style={{ borderColor: "#FD721D", width: "48%" }} labelStyle={{ color: "#FD721D" }}>
-          ← Atrás
-        </Button>
+        {/* Resumen */}
+        <View style={{ backgroundColor: "white", borderRadius: 10, padding: 12, marginTop: 8 }}>
+          <Text style={{ fontSize: 16, fontWeight: "700", textAlign: "center", color: "#B2A83F", marginBottom: 8 }}>
+            Resumen de Horarios
+          </Text>
+          {diasSemana.map(({ key, label }) => {
+            const horario = form.horarios[key as keyof typeof form.horarios];
+            return (
+              <View key={key} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 2 }}>
+                <Text style={{ textTransform: "capitalize" }}>{label}:</Text>
+                <Text style={{ color: horario.abierto ? "#16a34a" : "#dc2626" }}>
+                  {horario.abierto ? `${horario.apertura} - ${horario.cierre}` : "Cerrado"}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
 
-        <Button mode="contained" onPress={handleSubmit} style={{ backgroundColor: "#7BB3CD", width: "48%" }}>
-          ✅ Enviar
-        </Button>
-      </View>
-    </ScrollView>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 16, marginBottom: Math.max(6, insets.bottom) }}>
+          <Button
+            mode="outlined"
+            onPress={() => setPagina(1)}
+            style={{ borderColor: "#FD721D", width: "48%" }}
+            labelStyle={{ color: "#FD721D" }}
+          >
+            ← Atrás
+          </Button>
+
+          <Button
+            mode="contained"
+            onPress={handleSubmit}
+            style={{ backgroundColor: "#7BB3CD", width: "48%" }}
+          >
+            ✅ Enviar
+          </Button>
+        </View>
+      </ScrollView>
+    </View>
   );
 
   return <View style={{ flex: 1 }}>{pagina === 1 ? renderPagina1() : renderPagina2()}</View>;

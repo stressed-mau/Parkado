@@ -16,7 +16,8 @@ import Logo from "../assets/Logo";
 import DashboardParqueo from "./Dashboard"; // importamos el dashboard inline
 import AdminParqueo from "./AdminParqueo"; // Cambio de ParqueoDetalle a AdminParqueo
 import EditarEstacionamiento from "./EditarParqueo"; // Importamos el componente de edición inline
-import { useMapa } from '../hooks/useMapa'; // Asegúrate de tener esta función exportada correctamente
+import RegistrarParqueo from "./RegistroParqueo"; // 👈 NUEVO: vista para registrar parqueo inline
+import { useMapa } from "../hooks/useMapa"; // Asegúrate de tener esta función exportada correctamente
 
 const BACKEND_BASE = "https://parkado-backend.vercel.app";
 const colores = {
@@ -50,6 +51,9 @@ export default function ParqueoPorPropietario({
   // Mostrar detalle (admin) inline para un parqueo seleccionado
   const [showParqueoDetalle, setShowParqueoDetalle] = useState(false);
   const [showEditarParqueo, setShowEditarParqueo] = useState(false); // Nuevo estado para editar inline
+
+  // 👇 NUEVO: mostrar la vista de registrar parqueo inline
+  const [showRegistrarParqueo, setShowRegistrarParqueo] = useState(false);
 
   // Llamada a la función useMapa para obtener la función de recarga
   const { reloadParqueos } = useMapa(); // Asume que useMapa tiene reloadParqueos
@@ -151,6 +155,15 @@ export default function ParqueoPorPropietario({
     );
   }
 
+  // 👇 NUEVO: si quiere registrar un parqueo, mostramos esa vista inline
+  if (showRegistrarParqueo) {
+    return (
+      <RegistrarParqueo
+        onClose={() => setShowRegistrarParqueo(false)}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: colores.crema }]}>
@@ -171,9 +184,18 @@ export default function ParqueoPorPropietario({
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colores.crema }} contentContainerStyle={{ padding: 16 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colores.crema }}
+      contentContainerStyle={{ padding: 16 }}
+    >
       {/* header con posible boton cerrar (onClose) */}
-      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          marginBottom: 12,
+        }}
+      >
         {onClose ? (
           <TouchableOpacity onPress={onClose} style={{ marginRight: 10 }}>
             <MaterialCommunityIcons name="arrow-left" size={26} color="#111" />
@@ -181,9 +203,27 @@ export default function ParqueoPorPropietario({
         ) : null}
         <Logo width={64} height={64} />
         <View style={{ marginLeft: 10 }}>
-          <Text style={{ fontSize: 18, fontWeight: "800", color: colores.azul }}>Panel Administrador</Text>
+          <Text style={{ fontSize: 18, fontWeight: "800", color: colores.azul }}>
+            Panel Administrador
+          </Text>
           <Text style={{ color: "#6B7280" }}>Tus parqueos</Text>
         </View>
+
+        {/* 👇 NUEVO BOTÓN: REGISTRAR PARQUEO */}
+        <TouchableOpacity
+          onPress={() => setShowRegistrarParqueo(true)}
+          style={{
+            marginLeft: "auto",
+            backgroundColor: colores.azul,
+            paddingVertical: 9,
+            paddingHorizontal: 12,
+            borderRadius: 6,
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "700" }}>
+            Registrar parqueo
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {parqueos.length === 0 ? (
@@ -192,7 +232,11 @@ export default function ParqueoPorPropietario({
         </View>
       ) : (
         parqueos.map((p) => {
-          const rawImagen = p?.foto ?? p?.imagen ?? p?.imagenUrl ?? (Array.isArray(p?.fotos) ? p.fotos : null);
+          const rawImagen =
+            p?.foto ??
+            p?.imagen ??
+            p?.imagenUrl ??
+            (Array.isArray(p?.fotos) ? p.fotos : null);
           const imagen = resolveImageUrl(rawImagen, BACKEND_BASE, placeholderRemote);
           const nombre = p?.nombre || "Nombre parqueo";
           const direccion = p?.direccion || p?.ubicacion || "Dirección no disponible";
@@ -213,7 +257,11 @@ export default function ParqueoPorPropietario({
                       }}
                       style={styles.iconBtnBlue}
                     >
-                      <MaterialCommunityIcons name="pencil" size={20} color={colores.azul} />
+                      <MaterialCommunityIcons
+                        name="pencil"
+                        size={20}
+                        color={colores.azul}
+                      />
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -225,7 +273,11 @@ export default function ParqueoPorPropietario({
                       style={[styles.iconBtn, { borderColor: colores.azul, marginLeft: 8 }]}
                       accessibilityLabel={`Ir al dashboard de ${nombre}`}
                     >
-                      <MaterialCommunityIcons name="chart-bar" size={20} color={colores.azul} />
+                      <MaterialCommunityIcons
+                        name="chart-bar"
+                        size={20}
+                        color={colores.azul}
+                      />
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -237,7 +289,11 @@ export default function ParqueoPorPropietario({
                       style={[styles.iconBtn, { borderColor: colores.azul, marginLeft: 8 }]}
                       accessibilityLabel={`Administrar ${nombre}`}
                     >
-                      <MaterialCommunityIcons name="cog-outline" size={20} color={colores.azul} />
+                      <MaterialCommunityIcons
+                        name="cog-outline"
+                        size={20}
+                        color={colores.azul}
+                      />
                     </TouchableOpacity>
 
                     <View style={{ flex: 1 }} />
@@ -246,7 +302,11 @@ export default function ParqueoPorPropietario({
                       onPress={() => eliminarParqueo(p.id)} // Eliminar parqueo
                       style={[styles.iconBtn, { borderColor: colores.naranja }]}
                     >
-                      <MaterialCommunityIcons name="trash-can-outline" size={20} color={colores.naranja} />
+                      <MaterialCommunityIcons
+                        name="trash-can-outline"
+                        size={20}
+                        color={colores.naranja}
+                      />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -314,9 +374,27 @@ function ImageFallback({ uri, placeholderRemote }: any) {
   const isLocalAsset = typeof src === "number";
 
   return (
-    <View style={{ width: 80, height: 80, borderRadius: 8, overflow: "hidden", backgroundColor: "#f2f2f2" }}>
+    <View
+      style={{
+        width: 80,
+        height: 80,
+        borderRadius: 8,
+        overflow: "hidden",
+        backgroundColor: "#f2f2f2",
+      }}
+    >
       {loading && (
-        <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}>
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           <ActivityIndicator />
         </View>
       )}
@@ -326,7 +404,10 @@ function ImageFallback({ uri, placeholderRemote }: any) {
           source={isLocalAsset ? src : buildSource(src)}
           style={{ width: 80, height: 80 }}
           resizeMode="cover"
-          onLoad={() => { setLoading(false); setErrored(false); }}
+          onLoad={() => {
+            setLoading(false);
+            setErrored(false);
+          }}
           onError={(e) => {
             console.warn("[ImageFallback] onError for", src, e?.nativeEvent ?? e);
             setLoading(false);

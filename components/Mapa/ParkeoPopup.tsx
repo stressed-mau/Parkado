@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+ 
 
 // --- TIPOS ---
 type Horario = {
@@ -114,7 +115,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 80,
+    paddingTop: 100,
     zIndex: 40,
   },
   card: {
@@ -308,6 +309,10 @@ const ParkeoPopup: React.FC<ParkeoPopupProps> = ({
   onShowDirections,
   showingDirections = false,
 }) => {
+
+  
+
+
   const router = useRouter();
 
   const RatingStars = useCallback(({ count }: { count: number }) => {

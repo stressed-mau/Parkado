@@ -1,30 +1,28 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
-  StyleSheet,
-  Alert,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Logo from "../assets/Logo";
-import DashboardParqueo from "./Dashboard"; // importamos el dashboard inline
-import AdminParqueo from "./AdminParqueo"; // Cambio de ParqueoDetalle a AdminParqueo
-import EditarEstacionamiento from "./EditarParqueo"; // Importamos el componente de edición inline
-import RegistrarParqueo from "./RegistroParqueo"; // 👈 NUEVO: vista para registrar parqueo inline
-import { useMapa } from "../hooks/useMapa"; // Asegúrate de tener esta función exportada correctamente
+import { useMapa } from "../hooks/useMapa";
+import AdminParqueo from "./AdminParqueo";
+import DashboardParqueo from "./Dashboard";
+import EditarEstacionamiento from "./EditarParqueo";
+import RegistrarParqueo from "./RegistroParqueo";
 
 const BACKEND_BASE = "https://parkado-backend.vercel.app";
 const colores = {
   azul: "#7BB3CD",
   naranja: "#FD721D",
   crema: "#F6EEE4",
-  amarillo: "#F2BD2B",
 };
 
 type Props = {
@@ -36,7 +34,7 @@ type Props = {
 export default function ParqueoPorPropietario({
   ownerId = 2,
   onClose,
-  placeholderRemote = "https://via.placeholder.com/150?text=No+image",
+  placeholderRemote = "/mnt/data/50899fe3-5726-4356-bb3a-63fbda202474.png",
 }: Props) {
   const [parqueos, setParqueos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,24 +42,16 @@ export default function ParqueoPorPropietario({
 
   const API = `${BACKEND_BASE}/api/parqueos/owner/${ownerId}`;
 
-  // Mostrar dashboard inline para un parqueo seleccionado
   const [showDashboard, setShowDashboard] = useState(false);
   const [selectedParqueoId, setSelectedParqueoId] = useState<number | null>(null);
-
-  // Mostrar detalle (admin) inline para un parqueo seleccionado
   const [showParqueoDetalle, setShowParqueoDetalle] = useState(false);
-  const [showEditarParqueo, setShowEditarParqueo] = useState(false); // Nuevo estado para editar inline
-
-  // 👇 NUEVO: mostrar la vista de registrar parqueo inline
+  const [showEditarParqueo, setShowEditarParqueo] = useState(false);
   const [showRegistrarParqueo, setShowRegistrarParqueo] = useState(false);
 
-  // Llamada a la función useMapa para obtener la función de recarga
-  const { reloadParqueos } = useMapa(); // Asume que useMapa tiene reloadParqueos
+  const { reloadParqueos } = useMapa();
 
   useEffect(() => {
     let mounted = true;
-
-    // Al entrar: ocultar el botón Cerrar sesión en el resto de la app
     AsyncStorage.setItem("hideLogout", "true").catch(() => {});
 
     const fetchParqueos = async () => {
@@ -81,10 +71,21 @@ export default function ParqueoPorPropietario({
 
     return () => {
       mounted = false;
-      // Al salir: restaurar visibilidad del botón Cerrar sesión
       AsyncStorage.removeItem("hideLogout").catch(() => {});
     };
   }, [API]);
+
+  const confirmarEliminar = (parqueoId: number, nombre?: string) => {
+    Alert.alert(
+      `Eliminar parqueo`,
+      `¿Estás seguro que quieres eliminar "${nombre ?? "este parqueo"}"? Esta acción no se puede deshacer.`,
+      [
+        { text: "No", style: "cancel" },
+        { text: "Sí, eliminar", style: "destructive", onPress: () => eliminarParqueo(parqueoId) },
+      ],
+      { cancelable: true }
+    );
+  };
 
   const eliminarParqueo = async (parqueoId: number) => {
     if (!ownerId) {
@@ -94,19 +95,18 @@ export default function ParqueoPorPropietario({
 
     try {
       setLoading(true);
-
-      // Llamada a la API DELETE
       await axios.delete(`${BACKEND_BASE}/api/parqueos/${parqueoId}`, {
         headers: { Authorization: `Bearer ${ownerId}` },
-        data: { userId: ownerId }, // Usamos ownerId en lugar de userId
+        data: { userId: ownerId },
       });
 
-      // Actualizar la lista de parqueos después de la eliminación
-      const updatedParqueos = parqueos.filter((p) => p.id !== parqueoId);
-      setParqueos(updatedParqueos);
+      setParqueos((prev) => prev.filter((p) => p.id !== parqueoId));
 
-      // Recargar el mapa para reflejar los cambios
-      await reloadParqueos(); // Recarga los parqueos desde la API
+      try {
+        if (typeof reloadParqueos === "function") await reloadParqueos();
+      } catch (err) {
+        console.warn("reloadParqueos falló:", err);
+      }
 
       Alert.alert("Éxito", "Parqueo eliminado correctamente.");
     } catch (error) {
@@ -117,13 +117,11 @@ export default function ParqueoPorPropietario({
     }
   };
 
-  // Si el usuario abrió el dashboard para un parqueo seleccionado, renderizamos esa vista inline
   if (showDashboard && selectedParqueoId !== null) {
     return (
       <DashboardParqueo
         parqueoId={selectedParqueoId}
         onClose={() => {
-          // volver a la lista de parqueos
           setShowDashboard(false);
           setSelectedParqueoId(null);
         }}
@@ -131,13 +129,11 @@ export default function ParqueoPorPropietario({
     );
   }
 
-  // Si el usuario abrió el detalle (admin) para un parqueo seleccionado, renderizamos esa vista inline
   if (showParqueoDetalle && selectedParqueoId !== null) {
     return (
-      <AdminParqueo // Aquí hemos cambiado ParqueoDetalle por AdminParqueo
+      <AdminParqueo
         parqueoId={selectedParqueoId}
         onClose={() => {
-          // volver a la lista de parqueos
           setShowParqueoDetalle(false);
           setSelectedParqueoId(null);
         }}
@@ -145,28 +141,17 @@ export default function ParqueoPorPropietario({
     );
   }
 
-  // Si el usuario quiere editar el parqueo inline, mostramos el componente de edición
   if (showEditarParqueo && selectedParqueoId !== null) {
-    return (
-      <EditarEstacionamiento
-        route={{ params: { id: selectedParqueoId } }} // Pasamos la id del parqueo al editar
-        onClose={() => setShowEditarParqueo(false)} // Función para cerrar la vista de edición
-      />
-    );
+    return <EditarEstacionamiento route={{ params: { id: selectedParqueoId } }} onClose={() => setShowEditarParqueo(false)} />;
   }
 
-  // 👇 NUEVO: si quiere registrar un parqueo, mostramos esa vista inline
   if (showRegistrarParqueo) {
-    return (
-      <RegistrarParqueo
-        onClose={() => setShowRegistrarParqueo(false)}
-      />
-    );
+    return <RegistrarParqueo onClose={() => setShowRegistrarParqueo(false)} />;
   }
 
   if (loading) {
     return (
-      <View style={[styles.center, { backgroundColor: colores.crema }]}>
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: colores.crema }}>
         <ActivityIndicator size="large" color={colores.naranja} />
       </View>
     );
@@ -174,139 +159,124 @@ export default function ParqueoPorPropietario({
 
   if (error) {
     return (
-      <View style={[styles.center, { backgroundColor: colores.crema, padding: 16 }]}>
-        <Text style={{ color: "red", textAlign: "center" }}>{error}</Text>
-        <TouchableOpacity onPress={() => onClose?.()} style={styles.backButton}>
-          <Text style={{ color: "white", fontWeight: "700" }}>Volver</Text>
+      <View className="flex-1 items-center justify-center p-4" style={{ backgroundColor: colores.crema }}>
+        <Text className="text-red-500 text-center">{error}</Text>
+        <TouchableOpacity onPress={() => onClose?.()} className="mt-3 bg-[#7BB3CD] px-4 py-2 rounded-md">
+          <Text className="text-white font-bold">Volver</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colores.crema }}
-      contentContainerStyle={{ padding: 16 }}
+    <ScrollView className="flex-1" style={{ backgroundColor: colores.crema }} contentContainerStyle={{ padding: 16 }}>
+      {/* ---------- HEADER FIX: centro absoluto para evitar solape ---------- */}
+      {/* ---------- HEADER: logo -> título -> botón (vertical) ---------- */}
+<View className="mb-4">
+  {/* Row superior: back icon (alineado a la izquierda) */}
+  <View className="flex-row items-center">
+    {onClose ? (
+      <TouchableOpacity onPress={onClose} className="mr-2">
+        <MaterialCommunityIcons name="arrow-left" size={26} color="#111" />
+      </TouchableOpacity>
+    ) : null}
+  </View>
+
+  {/* Logo centrado en su propia línea */}
+  <View className="items-center mt-1">
+    {/* Reducimos tamaño del logo para que no empuje */}
+    <View className="w-14 h-14">
+      <Logo width={56} height={56} />
+    </View>
+  </View>
+
+  {/* Título y subtítulo centrados (su propia línea) */}
+  <View className="items-center mt-2">
+    <Text
+      className="text-[#7BB3CD] font-extrabold text-lg"
+      numberOfLines={1}
+      ellipsizeMode="tail"
+      style={{ maxWidth: 260 }}
     >
-      {/* header con posible boton cerrar (onClose) */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        {onClose ? (
-          <TouchableOpacity onPress={onClose} style={{ marginRight: 10 }}>
-            <MaterialCommunityIcons name="arrow-left" size={26} color="#111" />
-          </TouchableOpacity>
-        ) : null}
-        <Logo width={64} height={64} />
-        <View style={{ marginLeft: 10 }}>
-          <Text style={{ fontSize: 18, fontWeight: "800", color: colores.azul }}>
-            Panel Administrador
-          </Text>
-          <Text style={{ color: "#6B7280" }}>Tus parqueos</Text>
-        </View>
+      Panel Administrador
+    </Text>
+    <Text className="text-gray-400">Tus parqueos</Text>
+  </View>
 
-        {/* 👇 NUEVO BOTÓN: REGISTRAR PARQUEO */}
-        <TouchableOpacity
-          onPress={() => setShowRegistrarParqueo(true)}
-          style={{
-            marginLeft: "auto",
-            backgroundColor: colores.azul,
-            paddingVertical: 9,
-            paddingHorizontal: 12,
-            borderRadius: 6,
-          }}
-        >
-          <Text style={{ color: "white", fontWeight: "700" }}>
-            Registrar parqueo
-          </Text>
-        </TouchableOpacity>
-      </View>
+  {/* Botón Registrar debajo del título (centrado). Cámbialo a right-align si lo prefieres */}
+  <View className="items-center mt-3">
+    <TouchableOpacity
+      onPress={() => setShowRegistrarParqueo(true)}
+      className="bg-[#7BB3CD] px-4 py-2 rounded-md"
+      accessibilityLabel="Registrar parqueo"
+    >
+      <Text className="text-white font-bold">Registrar</Text>
+    </TouchableOpacity>
+  </View>
+</View>
 
+
+      {/* ---------- CONTENIDO ---------- */}
       {parqueos.length === 0 ? (
-        <View style={{ alignItems: "center", marginTop: 20 }}>
-          <Text style={{ color: "#6B7280" }}>No tienes parqueos registrados aún.</Text>
+        <View className="items-center mt-5">
+          <Text className="text-gray-400">No tienes parqueos registrados aún.</Text>
         </View>
       ) : (
         parqueos.map((p) => {
           const rawImagen =
-            p?.foto ??
-            p?.imagen ??
-            p?.imagenUrl ??
-            (Array.isArray(p?.fotos) ? p.fotos : null);
+            p?.foto ?? p?.imagen ?? p?.imagenUrl ?? (Array.isArray(p?.fotos) ? p.fotos : null);
           const imagen = resolveImageUrl(rawImagen, BACKEND_BASE, placeholderRemote);
           const nombre = p?.nombre || "Nombre parqueo";
           const direccion = p?.direccion || p?.ubicacion || "Dirección no disponible";
 
           return (
-            <View key={p.id ?? `${nombre}-${Math.random()}`} style={styles.card}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View key={p.id ?? `${nombre}-${Math.random()}`} className="mb-3 rounded-xl p-3 bg-white border border-gray-200">
+              <View className="flex-row items-center">
                 <ImageFallback uri={imagen} placeholderRemote={placeholderRemote} />
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={{ fontWeight: "800", fontSize: 16 }}>{nombre}</Text>
-                  <Text style={{ color: "#6B7280", marginTop: 4 }}>{direccion}</Text>
+                <View className="flex-1 ml-3">
+                  <Text className="font-extrabold text-base">{nombre}</Text>
+                  <Text className="text-gray-400 mt-1">{direccion}</Text>
 
-                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
+                  <View className="flex-row items-center mt-3">
                     <TouchableOpacity
                       onPress={() => {
                         setSelectedParqueoId(p?.id ?? null);
-                        setShowEditarParqueo(true); // Mostrar formulario de edición inline
+                        setShowEditarParqueo(true);
                       }}
-                      style={styles.iconBtnBlue}
+                      className="p-2 rounded-lg border border-[#7BB3CD] bg-white"
                     >
-                      <MaterialCommunityIcons
-                        name="pencil"
-                        size={20}
-                        color={colores.azul}
-                      />
+                      <MaterialCommunityIcons name="pencil" size={20} color={colores.azul} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={() => {
-                        // Aquí abrimos el dashboard inline pasando el id del parqueo
                         setSelectedParqueoId(p?.id ?? null);
                         setShowDashboard(true);
                       }}
-                      style={[styles.iconBtn, { borderColor: colores.azul, marginLeft: 8 }]}
+                      className="p-2 rounded-lg border border-[#7BB3CD] bg-white ml-2"
                       accessibilityLabel={`Ir al dashboard de ${nombre}`}
                     >
-                      <MaterialCommunityIcons
-                        name="chart-bar"
-                        size={20}
-                        color={colores.azul}
-                      />
+                      <MaterialCommunityIcons name="chart-bar" size={20} color={colores.azul} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={() => {
-                        // <-- AQUÍ: abrimos AdminParqueo inline (admin) con la id correspondiente
                         setSelectedParqueoId(p?.id ?? null);
                         setShowParqueoDetalle(true);
                       }}
-                      style={[styles.iconBtn, { borderColor: colores.azul, marginLeft: 8 }]}
+                      className="p-2 rounded-lg border border-[#7BB3CD] bg-white ml-2"
                       accessibilityLabel={`Administrar ${nombre}`}
                     >
-                      <MaterialCommunityIcons
-                        name="cog-outline"
-                        size={20}
-                        color={colores.azul}
-                      />
+                      <MaterialCommunityIcons name="cog-outline" size={20} color={colores.azul} />
                     </TouchableOpacity>
 
-                    <View style={{ flex: 1 }} />
+                    <View className="flex-1" />
 
                     <TouchableOpacity
-                      onPress={() => eliminarParqueo(p.id)} // Eliminar parqueo
-                      style={[styles.iconBtn, { borderColor: colores.naranja }]}
+                      onPress={() => confirmarEliminar(p.id, nombre)}
+                      className="p-2 rounded-lg border border-[#FD721D] bg-white"
                     >
-                      <MaterialCommunityIcons
-                        name="trash-can-outline"
-                        size={20}
-                        color={colores.naranja}
-                      />
+                      <MaterialCommunityIcons name="trash-can-outline" size={20} color={colores.naranja} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -374,27 +344,9 @@ function ImageFallback({ uri, placeholderRemote }: any) {
   const isLocalAsset = typeof src === "number";
 
   return (
-    <View
-      style={{
-        width: 80,
-        height: 80,
-        borderRadius: 8,
-        overflow: "hidden",
-        backgroundColor: "#f2f2f2",
-      }}
-    >
+    <View className="w-20 h-20 rounded-lg overflow-hidden bg-gray-100">
       {loading && (
-        <View
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
+        <View className="absolute inset-0 items-center justify-center">
           <ActivityIndicator />
         </View>
       )}
@@ -402,7 +354,7 @@ function ImageFallback({ uri, placeholderRemote }: any) {
       {src ? (
         <Image
           source={isLocalAsset ? src : buildSource(src)}
-          style={{ width: 80, height: 80 }}
+          className="w-20 h-20"
           resizeMode="cover"
           onLoad={() => {
             setLoading(false);
@@ -421,42 +373,10 @@ function ImageFallback({ uri, placeholderRemote }: any) {
           }}
         />
       ) : (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ fontSize: 24 }}>📷</Text>
+        <View className="flex-1 items-center justify-center">
+          <Text className="text-2xl">📷</Text>
         </View>
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  card: {
-    marginBottom: 12,
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#E6E6E6",
-  },
-  backButton: {
-    marginTop: 12,
-    backgroundColor: colores.azul,
-    padding: 10,
-    borderRadius: 8,
-  },
-  iconBtn: {
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colores.azul,
-    backgroundColor: "#fff",
-  },
-  iconBtnBlue: {
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colores.azul,
-    backgroundColor: "#fff",
-  },
-});

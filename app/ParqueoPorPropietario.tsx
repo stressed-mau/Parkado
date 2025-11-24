@@ -1,16 +1,17 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
+  StyleSheet,
+  Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Logo from "../assets/Logo";
 import DashboardParqueo from "./Dashboard";
 import AdminParqueo from "./AdminParqueo";
@@ -23,6 +24,7 @@ const colores = {
   azul: "#7BB3CD",
   naranja: "#FD721D",
   crema: "#F6EEE4",
+  amarillo: "#F2BD2B",
 };
 
 type Props = {
@@ -34,7 +36,7 @@ type Props = {
 export default function ParqueoPorPropietario({
   ownerId = 2,
   onClose,
-  placeholderRemote = "/mnt/data/50899fe3-5726-4356-bb3a-63fbda202474.png",
+  placeholderRemote = "https://via.placeholder.com/150?text=No+image",
 }: Props) {
   const [parqueos, setParqueos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +48,6 @@ export default function ParqueoPorPropietario({
   const [showDashboard, setShowDashboard] = useState(false);
   const [selectedParqueoId, setSelectedParqueoId] = useState<number | null>(null);
   const [showParqueoDetalle, setShowParqueoDetalle] = useState(false);
-  const [showEditarParqueo, setShowEditarParqueo] = useState(false);
   const [showEditarParqueo, setShowEditarParqueo] = useState(false);
   const [showRegistrarParqueo, setShowRegistrarParqueo] = useState(false);
 
@@ -76,18 +77,6 @@ export default function ParqueoPorPropietario({
     };
   }, [API]);
 
-  const confirmarEliminar = (parqueoId: number, nombre?: string) => {
-    Alert.alert(
-      `Eliminar parqueo`,
-      `¿Estás seguro que quieres eliminar "${nombre ?? "este parqueo"}"? Esta acción no se puede deshacer.`,
-      [
-        { text: "No", style: "cancel" },
-        { text: "Sí, eliminar", style: "destructive", onPress: () => eliminarParqueo(parqueoId) },
-      ],
-      { cancelable: true }
-    );
-  };
-
   const eliminarParqueo = async (parqueoId: number) => {
     if (!ownerId) {
       Alert.alert("Error", "No se pudo obtener el ownerId.");
@@ -99,7 +88,6 @@ export default function ParqueoPorPropietario({
 
       await axios.delete(`${BACKEND_BASE}/api/parqueos/${parqueoId}`, {
         headers: { Authorization: `Bearer ${ownerId}` },
-        data: { userId: ownerId },
         data: { userId: ownerId },
       });
 
@@ -132,7 +120,6 @@ export default function ParqueoPorPropietario({
   if (showParqueoDetalle && selectedParqueoId !== null) {
     return (
       <AdminParqueo
-      <AdminParqueo
         parqueoId={selectedParqueoId}
         onClose={() => {
           setShowParqueoDetalle(false);
@@ -153,12 +140,11 @@ export default function ParqueoPorPropietario({
 
   if (showRegistrarParqueo) {
     return <RegistrarParqueo onClose={() => setShowRegistrarParqueo(false)} />;
-    return <RegistrarParqueo onClose={() => setShowRegistrarParqueo(false)} />;
   }
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center" style={{ backgroundColor: colores.crema }}>
+      <View style={[styles.center, { backgroundColor: colores.crema }]}>
         <ActivityIndicator size="large" color={colores.naranja} />
       </View>
     );
@@ -166,10 +152,10 @@ export default function ParqueoPorPropietario({
 
   if (error) {
     return (
-      <View className="flex-1 items-center justify-center p-4" style={{ backgroundColor: colores.crema }}>
-        <Text className="text-red-500 text-center">{error}</Text>
-        <TouchableOpacity onPress={() => onClose?.()} className="mt-3 bg-[#7BB3CD] px-4 py-2 rounded-md">
-          <Text className="text-white font-bold">Volver</Text>
+      <View style={[styles.center, { backgroundColor: colores.crema, padding: 16 }]}>
+        <Text style={{ color: "red", textAlign: "center" }}>{error}</Text>
+        <TouchableOpacity onPress={() => onClose?.()} style={styles.backButton}>
+          <Text style={{ color: "white", fontWeight: "700" }}>Volver</Text>
         </TouchableOpacity>
       </View>
     );
@@ -194,37 +180,37 @@ export default function ParqueoPorPropietario({
         <Text style={styles.headerSubtitle}>Tus parqueos</Text>
       </View>
 
-      {/* ---------- CONTENIDO ---------- */}
       {parqueos.length === 0 ? (
-        <View className="items-center mt-5">
-          <Text className="text-gray-400">No tienes parqueos registrados aún.</Text>
+        <View style={{ alignItems: "center", marginTop: 20 }}>
+          <Text style={{ color: "#6B7280" }}>No tienes parqueos registrados aún.</Text>
         </View>
       ) : (
         parqueos.map((p) => {
           const rawImagen =
-            p?.foto ?? p?.imagen ?? p?.imagenUrl ?? (Array.isArray(p?.fotos) ? p.fotos : null);
+            p?.foto ??
+            p?.imagen ??
+            p?.imagenUrl ??
+            (Array.isArray(p?.fotos) ? p.fotos : null);
           const imagen = resolveImageUrl(rawImagen, BACKEND_BASE, placeholderRemote);
           const nombre = p?.nombre || "Nombre parqueo";
           const direccion = p?.direccion || p?.ubicacion || "Dirección no disponible";
 
           return (
-            <View key={p.id ?? `${nombre}-${Math.random()}`} className="mb-3 rounded-xl p-3 bg-white border border-gray-200">
-              <View className="flex-row items-center">
+            <View key={p.id ?? `${nombre}-${Math.random()}`} style={styles.card}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <ImageFallback uri={imagen} placeholderRemote={placeholderRemote} />
-                <View className="flex-1 ml-3">
-                  <Text className="font-extrabold text-base">{nombre}</Text>
-                  <Text className="text-gray-400 mt-1">{direccion}</Text>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={{ fontWeight: "800", fontSize: 16 }}>{nombre}</Text>
+                  <Text style={{ color: "#6B7280", marginTop: 4 }}>{direccion}</Text>
 
-                  <View className="flex-row items-center mt-3">
+                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
                     <TouchableOpacity
                       onPress={() => {
                         setSelectedParqueoId(p?.id ?? null);
                         setShowEditarParqueo(true);
-                        setShowEditarParqueo(true);
                       }}
-                      className="p-2 rounded-lg border border-[#7BB3CD] bg-white"
+                      style={styles.iconBtnBlue}
                     >
-                      <MaterialCommunityIcons name="pencil" size={20} color={colores.azul} />
                       <MaterialCommunityIcons name="pencil" size={20} color={colores.azul} />
                     </TouchableOpacity>
 
@@ -236,7 +222,6 @@ export default function ParqueoPorPropietario({
                       style={[styles.iconBtn, { borderColor: colores.azul, marginLeft: 8 }]}
                     >
                       <MaterialCommunityIcons name="chart-bar" size={20} color={colores.azul} />
-                      <MaterialCommunityIcons name="chart-bar" size={20} color={colores.azul} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -247,16 +232,19 @@ export default function ParqueoPorPropietario({
                       style={[styles.iconBtn, { borderColor: colores.azul, marginLeft: 8 }]}
                     >
                       <MaterialCommunityIcons name="cog-outline" size={20} color={colores.azul} />
-                      <MaterialCommunityIcons name="cog-outline" size={20} color={colores.azul} />
                     </TouchableOpacity>
 
-                    <View className="flex-1" />
+                    <View style={{ flex: 1 }} />
 
                     <TouchableOpacity
                       onPress={() => eliminarParqueo(p.id)}
                       style={[styles.iconBtn, { borderColor: colores.naranja }]}
                     >
-                      <MaterialCommunityIcons name="trash-can-outline" size={20} color={colores.naranja} />
+                      <MaterialCommunityIcons
+                        name="trash-can-outline"
+                        size={20}
+                        color={colores.naranja}
+                      />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -348,9 +336,27 @@ function ImageFallback({ uri, placeholderRemote }: any) {
   const isLocalAsset = typeof src === "number";
 
   return (
-    <View className="w-20 h-20 rounded-lg overflow-hidden bg-gray-100">
+    <View
+      style={{
+        width: 80,
+        height: 80,
+        borderRadius: 8,
+        overflow: "hidden",
+        backgroundColor: "#f2f2f2",
+      }}
+    >
       {loading && (
-        <View className="absolute inset-0 items-center justify-center">
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           <ActivityIndicator />
         </View>
       )}
@@ -358,7 +364,7 @@ function ImageFallback({ uri, placeholderRemote }: any) {
       {src ? (
         <Image
           source={isLocalAsset ? src : buildSource(src)}
-          className="w-20 h-20"
+          style={{ width: 80, height: 80 }}
           resizeMode="cover"
           onLoad={() => {
             setLoading(false);
@@ -377,8 +383,8 @@ function ImageFallback({ uri, placeholderRemote }: any) {
           }}
         />
       ) : (
-        <View className="flex-1 items-center justify-center">
-          <Text className="text-2xl">📷</Text>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ fontSize: 24 }}>📷</Text>
         </View>
       )}
     </View>

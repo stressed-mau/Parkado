@@ -87,7 +87,7 @@ export default function DashboardParqueo({ parqueoId = 1, onClose }) {
           <Logo width={72} height={72} />
           <Image
             source={{ uri: logoLocalUri }}
-            className="w-14 h-14 rounded-full ml-3"
+            className="w-18 h-14 rounded-full ml-3"
             resizeMode="cover"
           />
         </View>

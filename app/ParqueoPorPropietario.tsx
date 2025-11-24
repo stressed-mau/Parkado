@@ -13,11 +13,11 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Logo from "../assets/Logo";
-import DashboardParqueo from "./Dashboard"; // importamos el dashboard inline
-import AdminParqueo from "./AdminParqueo"; // Cambio de ParqueoDetalle a AdminParqueo
-import EditarEstacionamiento from "./EditarParqueo"; // Importamos el componente de edición inline
-import RegistrarParqueo from "./RegistroParqueo"; // 👈 NUEVO: vista para registrar parqueo inline
-import { useMapa } from "../hooks/useMapa"; // Asegúrate de tener esta función exportada correctamente
+import DashboardParqueo from "./Dashboard";
+import AdminParqueo from "./AdminParqueo";
+import EditarEstacionamiento from "./EditarParqueo";
+import RegistrarParqueo from "./RegistroParqueo";
+import { useMapa } from "../hooks/useMapa";
 
 const BACKEND_BASE = "https://parkado-backend.vercel.app";
 const colores = {
@@ -43,25 +43,17 @@ export default function ParqueoPorPropietario({
   const [error, setError] = useState<string | null>(null);
 
   const API = `${BACKEND_BASE}/api/parqueos/owner/${ownerId}`;
+  const { reloadParqueos } = useMapa();
 
-  // Mostrar dashboard inline para un parqueo seleccionado
   const [showDashboard, setShowDashboard] = useState(false);
   const [selectedParqueoId, setSelectedParqueoId] = useState<number | null>(null);
-
-  // Mostrar detalle (admin) inline para un parqueo seleccionado
   const [showParqueoDetalle, setShowParqueoDetalle] = useState(false);
-  const [showEditarParqueo, setShowEditarParqueo] = useState(false); // Nuevo estado para editar inline
-
-  // 👇 NUEVO: mostrar la vista de registrar parqueo inline
+  const [showEditarParqueo, setShowEditarParqueo] = useState(false);
   const [showRegistrarParqueo, setShowRegistrarParqueo] = useState(false);
-
-  // Llamada a la función useMapa para obtener la función de recarga
-  const { reloadParqueos } = useMapa(); // Asume que useMapa tiene reloadParqueos
 
   useEffect(() => {
     let mounted = true;
 
-    // Al entrar: ocultar el botón Cerrar sesión en el resto de la app
     AsyncStorage.setItem("hideLogout", "true").catch(() => {});
 
     const fetchParqueos = async () => {
@@ -81,7 +73,6 @@ export default function ParqueoPorPropietario({
 
     return () => {
       mounted = false;
-      // Al salir: restaurar visibilidad del botón Cerrar sesión
       AsyncStorage.removeItem("hideLogout").catch(() => {});
     };
   }, [API]);
@@ -95,18 +86,15 @@ export default function ParqueoPorPropietario({
     try {
       setLoading(true);
 
-      // Llamada a la API DELETE
       await axios.delete(`${BACKEND_BASE}/api/parqueos/${parqueoId}`, {
         headers: { Authorization: `Bearer ${ownerId}` },
-        data: { userId: ownerId }, // Usamos ownerId en lugar de userId
+        data: { userId: ownerId },
       });
 
-      // Actualizar la lista de parqueos después de la eliminación
       const updatedParqueos = parqueos.filter((p) => p.id !== parqueoId);
       setParqueos(updatedParqueos);
 
-      // Recargar el mapa para reflejar los cambios
-      await reloadParqueos(); // Recarga los parqueos desde la API
+      await reloadParqueos();
 
       Alert.alert("Éxito", "Parqueo eliminado correctamente.");
     } catch (error) {
@@ -117,13 +105,11 @@ export default function ParqueoPorPropietario({
     }
   };
 
-  // Si el usuario abrió el dashboard para un parqueo seleccionado, renderizamos esa vista inline
   if (showDashboard && selectedParqueoId !== null) {
     return (
       <DashboardParqueo
         parqueoId={selectedParqueoId}
         onClose={() => {
-          // volver a la lista de parqueos
           setShowDashboard(false);
           setSelectedParqueoId(null);
         }}
@@ -131,13 +117,11 @@ export default function ParqueoPorPropietario({
     );
   }
 
-  // Si el usuario abrió el detalle (admin) para un parqueo seleccionado, renderizamos esa vista inline
   if (showParqueoDetalle && selectedParqueoId !== null) {
     return (
-      <AdminParqueo // Aquí hemos cambiado ParqueoDetalle por AdminParqueo
+      <AdminParqueo
         parqueoId={selectedParqueoId}
         onClose={() => {
-          // volver a la lista de parqueos
           setShowParqueoDetalle(false);
           setSelectedParqueoId(null);
         }}
@@ -145,23 +129,17 @@ export default function ParqueoPorPropietario({
     );
   }
 
-  // Si el usuario quiere editar el parqueo inline, mostramos el componente de edición
   if (showEditarParqueo && selectedParqueoId !== null) {
     return (
       <EditarEstacionamiento
-        route={{ params: { id: selectedParqueoId } }} // Pasamos la id del parqueo al editar
-        onClose={() => setShowEditarParqueo(false)} // Función para cerrar la vista de edición
+        route={{ params: { id: selectedParqueoId } }}
+        onClose={() => setShowEditarParqueo(false)}
       />
     );
   }
 
-  // 👇 NUEVO: si quiere registrar un parqueo, mostramos esa vista inline
   if (showRegistrarParqueo) {
-    return (
-      <RegistrarParqueo
-        onClose={() => setShowRegistrarParqueo(false)}
-      />
-    );
+    return <RegistrarParqueo onClose={() => setShowRegistrarParqueo(false)} />;
   }
 
   if (loading) {
@@ -188,42 +166,18 @@ export default function ParqueoPorPropietario({
       style={{ flex: 1, backgroundColor: colores.crema }}
       contentContainerStyle={{ padding: 16 }}
     >
-      {/* header con posible boton cerrar (onClose) */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
+      {/* HEADER NUEVO */}
+      <View style={styles.headerContainer}>
         {onClose ? (
-          <TouchableOpacity onPress={onClose} style={{ marginRight: 10 }}>
+          <TouchableOpacity onPress={onClose} style={styles.headerBackBtn}>
             <MaterialCommunityIcons name="arrow-left" size={26} color="#111" />
           </TouchableOpacity>
         ) : null}
-        <Logo width={64} height={64} />
-        <View style={{ marginLeft: 10 }}>
-          <Text style={{ fontSize: 18, fontWeight: "800", color: colores.azul }}>
-            Panel Administrador
-          </Text>
-          <Text style={{ color: "#6B7280" }}>Tus parqueos</Text>
-        </View>
 
-        {/* 👇 NUEVO BOTÓN: REGISTRAR PARQUEO */}
-        <TouchableOpacity
-          onPress={() => setShowRegistrarParqueo(true)}
-          style={{
-            marginLeft: "auto",
-            backgroundColor: colores.azul,
-            paddingVertical: 9,
-            paddingHorizontal: 12,
-            borderRadius: 6,
-          }}
-        >
-          <Text style={{ color: "white", fontWeight: "700" }}>
-            Registrar parqueo
-          </Text>
-        </TouchableOpacity>
+        <Logo width={72} height={72} />
+
+        <Text style={styles.headerTitle}>Panel Administrador</Text>
+        <Text style={styles.headerSubtitle}>Tus parqueos</Text>
       </View>
 
       {parqueos.length === 0 ? (
@@ -253,53 +207,37 @@ export default function ParqueoPorPropietario({
                     <TouchableOpacity
                       onPress={() => {
                         setSelectedParqueoId(p?.id ?? null);
-                        setShowEditarParqueo(true); // Mostrar formulario de edición inline
+                        setShowEditarParqueo(true);
                       }}
                       style={styles.iconBtnBlue}
                     >
-                      <MaterialCommunityIcons
-                        name="pencil"
-                        size={20}
-                        color={colores.azul}
-                      />
+                      <MaterialCommunityIcons name="pencil" size={20} color={colores.azul} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={() => {
-                        // Aquí abrimos el dashboard inline pasando el id del parqueo
                         setSelectedParqueoId(p?.id ?? null);
                         setShowDashboard(true);
                       }}
                       style={[styles.iconBtn, { borderColor: colores.azul, marginLeft: 8 }]}
-                      accessibilityLabel={`Ir al dashboard de ${nombre}`}
                     >
-                      <MaterialCommunityIcons
-                        name="chart-bar"
-                        size={20}
-                        color={colores.azul}
-                      />
+                      <MaterialCommunityIcons name="chart-bar" size={20} color={colores.azul} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={() => {
-                        // <-- AQUÍ: abrimos AdminParqueo inline (admin) con la id correspondiente
                         setSelectedParqueoId(p?.id ?? null);
                         setShowParqueoDetalle(true);
                       }}
                       style={[styles.iconBtn, { borderColor: colores.azul, marginLeft: 8 }]}
-                      accessibilityLabel={`Administrar ${nombre}`}
                     >
-                      <MaterialCommunityIcons
-                        name="cog-outline"
-                        size={20}
-                        color={colores.azul}
-                      />
+                      <MaterialCommunityIcons name="cog-outline" size={20} color={colores.azul} />
                     </TouchableOpacity>
 
                     <View style={{ flex: 1 }} />
 
                     <TouchableOpacity
-                      onPress={() => eliminarParqueo(p.id)} // Eliminar parqueo
+                      onPress={() => eliminarParqueo(p.id)}
                       style={[styles.iconBtn, { borderColor: colores.naranja }]}
                     >
                       <MaterialCommunityIcons
@@ -315,6 +253,30 @@ export default function ParqueoPorPropietario({
           );
         })
       )}
+
+      {/* BOTÓN FINAL — ABAJO DE TODO */}
+      <View
+        style={{
+          marginTop: 24,
+          marginBottom: 8,
+          alignItems: "center",
+        }}
+      >
+        <TouchableOpacity
+          onPress={() => setShowRegistrarParqueo(true)}
+          style={{
+            backgroundColor: colores.azul,
+            paddingVertical: 12,
+            paddingHorizontal: 20,
+            borderRadius: 999,
+            elevation: 2,
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "700", fontSize: 15 }}>
+            Registrar parqueo
+          </Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -458,5 +420,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colores.azul,
     backgroundColor: "#fff",
+  },
+
+  /* NUEVOS ESTILOS HEADER */
+  headerContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 30, // lo baja un poco de la barra de estado
+    marginBottom: 18,
+  },
+  headerBackBtn: {
+    position: "absolute",
+    left: 0,
+    top: 34,
+    padding: 4,
+  },
+  headerTitle: {
+    marginTop: 8,
+    fontSize: 18,
+    fontWeight: "800",
+    color: colores.azul,
+  },
+  headerSubtitle: {
+    marginTop: 2,
+    color: "#6B7280",
   },
 });

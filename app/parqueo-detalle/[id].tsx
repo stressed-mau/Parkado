@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
+  Linking, // 👈 IMPORTANTE para abrir WhatsApp
 } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather, FontAwesome5 } from "@expo/vector-icons";
@@ -24,6 +25,7 @@ interface Servicio { estado: boolean; servicio: { nombre: string }; }
 interface Horario { diaSemana: string; horaAbrir: string; horaCerrar: string; esCerrado: boolean; }
 interface Tarifa { tipoVehiculoId: number; precioHora: string; descripcion: string; }
 interface Foto { url: string }
+
 interface ParqueoDetalleAPI {
   id: number;
   nombre: string;
@@ -39,6 +41,17 @@ interface ParqueoDetalleAPI {
   fotos: Foto[];
   descripcion?: string;
   plazas: any[];
+  // si tu API ya tiene algo tipo usuarioId o propietarioId lo puedes agregar aquí:
+  // usuarioId?: number;
+  // propietarioId?: number;
+}
+
+interface UsuarioPerfil {
+  id: number;
+  nombres: string;
+  apellidos: string;
+  correoElectronico: string;
+  telefono: string;
 }
 
 const ALL_DAYS = ["lunes","martes","miercoles","jueves","viernes","sabado","domingo"];
@@ -71,8 +84,6 @@ const formatHour = (t: string) => {
   // Retornar el formato de hora con minutos
   return `${hour12}:${minutes.toString().padStart(2, '0')} ${period}`;
 };
-
-
 
 const RatingStars = ({ rating }: { rating: number }) => {
   const full = Math.floor(rating);
@@ -113,8 +124,13 @@ const useParqueoData = (d: ParqueoDetalleAPI | null) => useMemo(() => {
   const capAutoObj = d.capacidades?.find(c => c.tipoVehiculoId === 1);
   const capMotoObj = d.capacidades?.find(c => c.tipoVehiculoId === 2);
 
-  const autoDisp = Array.isArray(d.plazas) ? d.plazas.filter((p: any) => p.tipoVehiculoId === 1 && (!p.estado || p.estado === 'DISPONIBLE' || p.estado === 'libre')).length : (capAutoObj?.cantidad || 0);
-  const motoDisp = Array.isArray(d.plazas) ? d.plazas.filter((p: any) => p.tipoVehiculoId === 2 && (!p.estado || p.estado === 'DISPONIBLE' || p.estado === 'libre')).length : (capMotoObj?.cantidad || 0);
+  const autoDisp = Array.isArray(d.plazas)
+    ? d.plazas.filter((p: any) => p.tipoVehiculoId === 1 && (!p.estado || p.estado === 'DISPONIBLE' || p.estado === 'libre')).length
+    : (capAutoObj?.cantidad || 0);
+
+  const motoDisp = Array.isArray(d.plazas)
+    ? d.plazas.filter((p: any) => p.tipoVehiculoId === 2 && (!p.estado || p.estado === 'DISPONIBLE' || p.estado === 'libre')).length
+    : (capMotoObj?.cantidad || 0);
 
   return {
     imagenes,
@@ -143,6 +159,9 @@ export default function DetalleParqueoScreen() {
   const [modalReviews, setModalReviews] = useState(false);
   const [modalImage, setModalImage] = useState(false);
 
+  const [telefonoPropietario, setTelefonoPropietario] = useState<string | null>(null);
+  const [loadingTelefono, setLoadingTelefono] = useState(false);
+
   const { average, count } = useParqueoStats(data);
   const {
     imagenes, img, tarifaAuto, tarifaMoto,
@@ -165,6 +184,36 @@ export default function DetalleParqueoScreen() {
         const found = json.find(p => p.id === idBuscado);
         if (!found) throw new Error(`No se encontró el parqueo con ID: ${idBuscado}`);
         setData(found);
+
+        // 👇 Intentar obtener el id del propietario (ajusta usuarioId/propietarioId según tu API)
+        const propietarioId =
+          (found as any).usuarioId ??
+          (found as any).propietarioId ??
+          null;
+
+        if (propietarioId) {
+  try {
+    console.log("🧑‍💼 ID del propietario:", propietarioId);
+
+    setLoadingTelefono(true);
+    const respUser = await fetch(
+      `https://parkado-backend.vercel.app/api/usuarios/${propietarioId}`
+    );
+    if (!respUser.ok) throw new Error("No se pudo obtener el teléfono del propietario");
+    const usuario: UsuarioPerfil = await respUser.json();
+
+    console.log("📥 Usuario recibido de la API:", usuario);
+    console.log("📞 Teléfono recibido de la API:", usuario.telefono);
+
+    setTelefonoPropietario(usuario.telefono);
+  } catch (err) {
+    console.error("Error obteniendo teléfono del propietario:", err);
+  } finally {
+    setLoadingTelefono(false);
+  }
+}
+
+
       } catch (e: any) {
         console.error("❌ ERROR DURANTE EL FETCH:", e);
         setError(e.message || "Error de conexión. Verifica tu internet.");
@@ -195,6 +244,21 @@ export default function DetalleParqueoScreen() {
       }
     });
   };
+
+const handleWhatsAppPress = () => {
+  if (!telefonoPropietario) {
+    Alert.alert("Teléfono no disponible", "Este parqueo no tiene un teléfono registrado.");
+    return;
+  }
+
+  const phoneClean = telefonoPropietario.replace(/[^\d]/g, "");
+  const url = `https://wa.me/591${phoneClean}?text=Hola,%20quiero%20hacer%20una%20consulta%20sobre%20su%20parqueo`;
+
+  Linking.openURL(url).catch(() => {
+    Alert.alert("Error", "No se pudo abrir WhatsApp.");
+  });
+};
+
 
   /* Renders */
   if (loading) return (
@@ -237,20 +301,40 @@ export default function DetalleParqueoScreen() {
           <Text style={{ marginLeft: 8, color: '#000' }}>({count} {count === 1 ? 'opinión' : 'opiniones'})</Text>
         </View>
 
-        {/* Botones: Reservar + Ver Reseñas */}
+        {/* Botones: Reservar + Ver Reseñas + WhatsApp */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
           <TouchableOpacity
             onPress={handleNavigateToReserva}
-            style={{ width: '48%', backgroundColor: '#FD721D', paddingVertical: 12, borderRadius: 10, alignItems: 'center' }}
+            style={{ width: '32%', backgroundColor: '#FD721D', paddingVertical: 12, borderRadius: 10, alignItems: 'center' }}
           >
             <Text style={{ color: 'white', fontWeight: '700' }}>RESERVAR</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setModalReviews(true)}
-            style={{ width: '48%', backgroundColor: '#7BB5CB', paddingVertical: 12, borderRadius: 10, alignItems: 'center' }}
+            style={{ width: '32%', backgroundColor: '#7BB5CB', paddingVertical: 12, borderRadius: 10, alignItems: 'center' }}
           >
             <Text style={{ color: 'white', fontWeight: '700' }}>VER RESEÑAS</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            disabled={!telefonoPropietario || loadingTelefono}
+            onPress={handleWhatsAppPress}
+            style={{
+              width: '32%',
+              backgroundColor: (!telefonoPropietario || loadingTelefono) ? '#9CA3AF' : '#25D366',
+              paddingVertical: 12,
+              borderRadius: 10,
+              alignItems: 'center',
+              flexDirection: 'row',
+              justifyContent: 'center',
+              gap: 6,
+            }}
+          >
+            <FontAwesome5 name="whatsapp" size={18} color="white" />
+            <Text style={{ color: 'white', fontWeight: '700' }}>
+              {loadingTelefono ? "CARGANDO..." : "WHATSAPP"}
+            </Text>
           </TouchableOpacity>
         </View>
 

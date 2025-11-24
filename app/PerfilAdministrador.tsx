@@ -227,6 +227,12 @@ export default function PerfilAdministrador() {
         </TouchableOpacity>
       )}
 
+<View style={{ paddingHorizontal: 18, marginTop: 4, marginBottom: 8 }}>
+  <Text style={{ fontSize: 18, fontWeight: "800", color: "#111827" }}>
+    Historial de parqueos visitados
+  </Text>
+</View>
+
 
       {/* Lista de reservas */}
       <View style={styles.listContainer}>

@@ -6,8 +6,6 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
-  Modal,
-  Pressable,
   Platform,
   ScrollView,
   Text,
@@ -18,10 +16,7 @@ import {
 } from "react-native";
 import Logo from "../../assets/Logo";
 
-// Componentes de perfil (renderizados inline)
-import PerfilConductor from "../PerfilConductor";
 import PerfilAdministrador from "../PerfilAdministrador";
-// IMPORTA el componente de registro para renderizar inline
 import RegistroUsuario from "../RegistroUsuario";
 
 /* BACKEND */
@@ -73,22 +68,20 @@ export default function LoginUsuario({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // control para mostrar perfil tras login
+  // mostrar perfil tras login
   const [showPerfil, setShowPerfil] = useState(false);
-  // true si es conductor
-  const [isConductor, setIsConductor] = useState<boolean | null>(null);
 
-  // rol en texto (para modal / banner)
+  // rol en texto (por si lo quieres usar en algún lado)
   const [roleText, setRoleText] = useState<string | null>(null);
-  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [showRoleModal, setShowRoleModal] = useState(false); // no se usa visualmente, pero lo dejamos
 
-  // mostrar Registro inline en lugar de navigation
+  // mostrar Registro inline
   const [showRegister, setShowRegister] = useState(false);
 
-  // --- nuevo estado: si true ocultamos el botón Cerrar sesión ---
+  // si true ocultamos el botón Cerrar sesión (lo controla otra vista via AsyncStorage)
   const [hideLogout, setHideLogout] = useState<boolean>(false);
 
-  // chequeo inicial: si ya hay userData en AsyncStorage -> intentar resolver roles via API
+  // --------- AUTOLOGIN AL ABRIR LA APP ----------
   useEffect(() => {
     (async () => {
       try {
@@ -96,30 +89,77 @@ export default function LoginUsuario({ navigation }: any) {
         if (!raw) return;
         const userData = JSON.parse(raw);
 
-        // mostrar loader mientras resolvemos
-        setShowPerfil(true);
-        setIsConductor(null);
-
-        // preferimos obtener roles desde la API con id + token
         const id = userData?.id;
         const token = userData?.token ?? null;
+        if (!id) return;
 
-        const rolesFromApi = await fetchRolesFromApi(id, token);
-        if (rolesFromApi) {
-          const conductor = rolesIncludeConductor(rolesFromApi);
-          setIsConductor(conductor);
-          setRoleText(makeRoleString(rolesFromApi));
-          setShowRoleModal(true);
-          return;
+        // mostramos el contenedor de perfil
+        setShowPerfil(true);
+
+        let roleField: any = extractRoleFromUserData(userData);
+
+        // 1) refrescar perfil
+        try {
+          const perfilResp = await axios.get(
+            `${BACKEND_BASE}/api/usuarios/${id}`,
+            {
+              headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            }
+          );
+
+          const perfil = perfilResp?.data;
+          if (perfil) {
+            userData.profile = perfil;
+            const rolFromPerfil =
+              perfil?.rol || perfil?.role || perfil?.roles || null;
+            if (rolFromPerfil) {
+              userData.role = rolFromPerfil;
+              roleField = rolFromPerfil;
+            }
+          }
+        } catch (e) {
+          console.warn("No se pudo refrescar perfil (no crítico):", e);
         }
 
-        // fallback: intentar role desde userData (local)
-        const roleFromStorage = extractRoleFromUserData(userData);
-        const conductor = isRoleConductor(roleFromStorage);
-        setIsConductor(conductor);
-        const resolvedRole = resolveRoleString(roleFromStorage, userData?.token);
+        // 2) ROLES DESDE /api/usuarios/:id/roles
+        try {
+          const rolesResp = await axios.get(
+            `${BACKEND_BASE}/api/usuarios/${id}/roles`,
+            {
+              headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            }
+          );
+          const rolesArr = Array.isArray(rolesResp.data)
+            ? rolesResp.data
+            : rolesResp.data?.data || [];
+          if (rolesArr.length) {
+            userData.roles = rolesArr; // [{id, nombre}, ...]
+            roleField = rolesArr;
+          }
+        } catch (e) {
+          console.warn("No se pudieron obtener roles vía API (no crítico):", e);
+        }
+
+        // si no hay rol todavía, usamos JWT
+        if (!roleField) {
+          const decoded = decodeJWT(token);
+          if (decoded) {
+            roleField =
+              decoded.role ||
+              decoded.rol ||
+              decoded.roles ||
+              decoded ||
+              null;
+          }
+        }
+
+        const resolvedRole = resolveRoleString(roleField, token);
         setRoleText(resolvedRole);
         setShowRoleModal(true);
+
+        // sincronizamos en storage
+        userData.roleText = resolvedRole;
+        await AsyncStorage.setItem("userData", JSON.stringify(userData));
       } catch (e) {
         console.warn("Init login check error:", e);
         setShowPerfil(false);
@@ -128,7 +168,6 @@ export default function LoginUsuario({ navigation }: any) {
   }, []);
 
   // Efecto que revisa la bandera hideLogout en AsyncStorage.
-  // Lo hacemos inicialmente y también mientras el perfil está visible comprobamos periódicamente
   useEffect(() => {
     let mounted = true;
     let interval: any = null;
@@ -146,7 +185,7 @@ export default function LoginUsuario({ navigation }: any) {
     // check inicial
     checkFlag();
 
-    // si el perfil está abierto, chequeamos cada 800ms para detectar cambios rápidos (entra/sale vista propietario)
+    // si el perfil está abierto, chequeamos cada 800ms para detectar cambios rápidos
     if (showPerfil) {
       interval = setInterval(checkFlag, 800);
     }
@@ -188,62 +227,86 @@ export default function LoginUsuario({ navigation }: any) {
         email: correo,
       };
 
-      // intentamos obtener perfil completo
+      // 1) perfil completo + rol desde /usuarios/:id
       try {
         if (userData.id) {
-          const perfilResp = await axios.get(`${BACKEND_BASE}/api/usuarios/${userData.id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const perfilResp = await axios.get(
+            `${BACKEND_BASE}/api/usuarios/${userData.id}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
           if (perfilResp?.data) {
             userData.profile = perfilResp.data;
-            userData.role =
+            const rolFromPerfil =
               perfilResp.data?.rol ||
               perfilResp.data?.role ||
               perfilResp.data?.roles ||
-              userData.role;
+              null;
+            if (rolFromPerfil) {
+              userData.role = rolFromPerfil;
+            }
           }
         }
       } catch (e) {
         console.warn("No se pudo cargar perfil (no crítico):", e);
       }
 
-      if (!userData.role) {
-        userData.role = response.data?.role || response.data?.user?.role || null;
+      // 2) ROLES DESDE /api/usuarios/:id/roles
+      try {
+        if (userData.id) {
+          const rolesResp = await axios.get(
+            `${BACKEND_BASE}/api/usuarios/${userData.id}/roles`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+          const rolesArr = Array.isArray(rolesResp.data)
+            ? rolesResp.data
+            : rolesResp.data?.data || [];
+          if (rolesArr.length) {
+            userData.roles = rolesArr; // [{id, nombre: "OWNER"}, {id, nombre: "CONDUCTOR"}]
+          }
+        }
+      } catch (e) {
+        console.warn("No se pudieron obtener roles (no crítico):", e);
       }
+
+      // si aún no tenemos role simple, probamos con lo que venga del login
+      if (!userData.role) {
+        userData.role =
+          response.data?.role || response.data?.user?.role || null;
+      }
+
+      // resolvemos el texto de rol a partir de todo lo que tenemos
+      const roleFieldFromAll =
+        extractRoleFromUserData(userData) ||
+        decoded?.role ||
+        decoded?.rol ||
+        decoded?.roles ||
+        decoded ||
+        null;
+
+      const resolvedRoleText = resolveRoleString(
+        roleFieldFromAll,
+        userData.token
+      );
+
+      // Guardamos texto de rol (por si quieres usarlo en otras vistas)
+      userData.roleText = resolvedRoleText;
 
       await AsyncStorage.setItem("userData", JSON.stringify(userData));
 
       setCorreo("");
       setPassword("");
 
-      // Determinar roles VIA API (preferible)
-      let conductorFlag: boolean | null = null;
-      let resolvedRoleText: string | null = null;
-      try {
-        if (userData.id) {
-          const rolesApi = await fetchRolesFromApi(userData.id, userData.token);
-          if (rolesApi) {
-            conductorFlag = rolesIncludeConductor(rolesApi);
-            resolvedRoleText = makeRoleString(rolesApi);
-          }
-        }
-      } catch (e) {
-        console.warn("No se pudieron obtener roles vía API tras login (no crítico):", e);
-      }
-
-      if (conductorFlag === null) {
-        const roleFromAll = extractRoleFromUserData(userData) || decoded || null;
-        conductorFlag = isRoleConductor(roleFromAll);
-        resolvedRoleText = resolveRoleString(roleFromAll, userData.token);
-      }
-
-      setIsConductor(conductorFlag);
       setShowPerfil(true);
       setRoleText(resolvedRoleText);
       setShowRoleModal(true);
     } catch (err: any) {
       console.error("Error login:", err);
-      const msg = err.response?.data?.message || err.message || "Error de login";
+      const msg =
+        err.response?.data?.message || err.message || "Error de login";
       Alert.alert("Error", msg);
     } finally {
       setIsLoading(false);
@@ -253,113 +316,20 @@ export default function LoginUsuario({ navigation }: any) {
   const handleLogout = async () => {
     await AsyncStorage.removeItem("userData");
     setShowPerfil(false);
-    setIsConductor(null);
     setRoleText(null);
     setShowRoleModal(false);
   };
 
-  // ---------------- helpers de roles / API ----------------
-
-  async function fetchRolesFromApi(id: any, token: string | null) {
-    if (!id) return null;
-    try {
-      const resp = await axios.get(`${BACKEND_BASE}/api/usuarios/${id}/roles`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      const data = resp?.data;
-      const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : null;
-      if (!arr) return null;
-      return arr;
-    } catch (e) {
-      console.warn("Error fetchRolesFromApi:", e);
-      return null;
-    }
-  }
-
-  function rolesIncludeConductor(roles: any): boolean {
-    if (!roles) return false;
-    if (typeof roles === "string") {
-      const r = roles.toLowerCase();
-      return r.includes("conductor") || r.includes("driver") || r.includes("chofer");
-    }
-    if (Array.isArray(roles)) {
-      return roles.some((item) => {
-        if (!item) return false;
-        if (typeof item === "string") {
-          const v = item.toLowerCase();
-          return v.includes("conductor") || v.includes("driver") || v.includes("chofer");
-        }
-        if (typeof item === "object") {
-          const candidate =
-            String(item?.nombre || item?.name || item?.role || item?.rol || JSON.stringify(item)).toLowerCase();
-          return candidate.includes("conductor") || candidate.includes("driver") || candidate.includes("chofer");
-        }
-        return false;
-      });
-    }
-    if (typeof roles === "object") {
-      const val = JSON.stringify(roles).toLowerCase();
-      return val.includes("conductor") || val.includes("driver") || val.includes("chofer");
-    }
-    return false;
-  }
-
-  function makeRoleString(roles: any) {
-    if (!roles) return "usuario";
-    if (typeof roles === "string") return capitalizeFirst(roles);
-    if (Array.isArray(roles)) {
-      for (const item of roles) {
-        const candidate = (item?.nombre || item?.name || item || "").toString();
-        if (candidate.toUpperCase().includes("CONDUCTOR")) return "Conductor";
-      }
-      for (const item of roles) {
-        const candidate = (item?.nombre || item?.name || item || "").toString();
-        if (candidate) return capitalizeFirst(candidate);
-      }
-      return "usuario";
-    }
-    if (typeof roles === "object") {
-      const label = roles?.nombre || roles?.name || roles?.role || roles?.rol;
-      if (label) return capitalizeFirst(String(label));
-      return capitalizeFirst(JSON.stringify(roles));
-    }
-    return "usuario";
-  }
+  // ---------------- helpers de roles ----------------
 
   function extractRoleFromUserData(userData: any) {
     if (!userData) return null;
+    if (userData.roles) return userData.roles; // array de /roles
     if (userData.role) return userData.role;
-    if (userData.roles) return userData.roles;
     if (userData.profile?.rol) return userData.profile.rol;
     if (userData.profile?.role) return userData.profile.role;
+    if (userData.profile?.roles) return userData.profile.roles;
     return null;
-  }
-
-  function isRoleConductor(role: any) {
-    if (!role) return false;
-    if (typeof role === "string") {
-      const r = role.toLowerCase();
-      return r.includes("conductor") || r.includes("chofer") || r.includes("driver");
-    }
-    if (Array.isArray(role)) {
-      return role.some((item) => {
-        if (!item) return false;
-        if (typeof item === "string") {
-          const v = item.toLowerCase();
-          return v.includes("conductor") || v.includes("chofer") || v.includes("driver");
-        }
-        if (typeof item === "object" && (item.role || item.name || item.nombre)) {
-          const val = (item.role || item.name || item.nombre || "").toString().toLowerCase();
-          return val.includes("conductor") || val.includes("chofer") || val.includes("driver");
-        }
-        return false;
-      });
-    }
-    if (typeof role === "object") {
-      const val = JSON.stringify(role).toLowerCase();
-      return val.includes("conductor") || val.includes("chofer") || val.includes("driver");
-    }
-    return false;
   }
 
   function resolveRoleString(roleField: any, token?: string | null) {
@@ -370,8 +340,13 @@ export default function LoginUsuario({ navigation }: any) {
       for (const item of roleField) {
         if (!item) continue;
         if (typeof item === "string") return capitalizeFirst(item);
-        if (typeof item === "object" && (item.role || item.name || item.nombre)) {
-          return capitalizeFirst(String(item.role || item.name || item.nombre));
+        if (
+          typeof item === "object" &&
+          (item.role || item.name || item.nombre)
+        ) {
+          return capitalizeFirst(
+            String(item.role || item.name || item.nombre)
+          );
         }
       }
     }
@@ -379,7 +354,8 @@ export default function LoginUsuario({ navigation }: any) {
       if (roleField.role) return capitalizeFirst(String(roleField.role));
       if (roleField.name) return capitalizeFirst(String(roleField.name));
       if (roleField.nombre) return capitalizeFirst(String(roleField.nombre));
-      if ((roleField as any).rol) return capitalizeFirst(String((roleField as any).rol));
+      if ((roleField as any).rol)
+        return capitalizeFirst(String((roleField as any).rol));
       return capitalizeFirst(JSON.stringify(roleField));
     }
     if (token) {
@@ -388,8 +364,13 @@ export default function LoginUsuario({ navigation }: any) {
         if (decoded.role) return capitalizeFirst(String(decoded.role));
         if (decoded.rol) return capitalizeFirst(String(decoded.rol));
         if (decoded.roles) {
-          if (typeof decoded.roles === "string") return capitalizeFirst(decoded.roles);
-          if (Array.isArray(decoded.roles) && decoded.roles.length) return capitalizeFirst(String(decoded.roles[0]));
+          if (typeof decoded.roles === "string")
+            return capitalizeFirst(decoded.roles);
+          if (
+            Array.isArray(decoded.roles) &&
+            decoded.roles.length
+          )
+            return capitalizeFirst(String(decoded.roles[0]));
         }
       }
     }
@@ -408,7 +389,13 @@ export default function LoginUsuario({ navigation }: any) {
     return (
       <View style={{ flex: 1 }}>
         {/* Header pequeño */}
-        <View style={{ padding: 12, backgroundColor: "#F6EEE4", alignItems: "center" }}>
+        <View
+          style={{
+            padding: 12,
+            backgroundColor: "#F6EEE4",
+            alignItems: "center",
+          }}
+        >
           <Text style={{ fontWeight: "800", fontSize: 18 }}>Registro</Text>
         </View>
 
@@ -428,28 +415,20 @@ export default function LoginUsuario({ navigation }: any) {
               alignItems: "center",
             }}
           >
-            <Text style={{ color: "white", fontWeight: "700" }}>Volver al login</Text>
+            <Text style={{ color: "white", fontWeight: "700" }}>
+              Volver al login
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
 
-  // Si showPerfil es true — mostramos el perfil correspondiente (inline)
+  // Si showPerfil es true — SIEMPRE mostramos PerfilAdministrador
   if (showPerfil) {
-    if (isConductor === null) {
-      return (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F6EEE4" }}>
-          <ActivityIndicator size="large" color="#FD721D" />
-        </View>
-      );
-    }
-
     return (
       <View style={{ flex: 1 }}>
-        
-
-        {isConductor ? <PerfilConductor /> : <PerfilAdministrador />}
+        <PerfilAdministrador />
 
         {/* Mostrar Cerrar sesión SOLO si hideLogout === false */}
         {!hideLogout ? (
@@ -463,12 +442,12 @@ export default function LoginUsuario({ navigation }: any) {
                 alignItems: "center",
               }}
             >
-              <Text style={{ color: "white", fontWeight: "700" }}>Cerrar sesión</Text>
+              <Text style={{ color: "white", fontWeight: "700" }}>
+                Cerrar sesión
+              </Text>
             </TouchableOpacity>
           </View>
         ) : null}
-
-        
       </View>
     );
   }
@@ -488,18 +467,49 @@ export default function LoginUsuario({ navigation }: any) {
           <Logo />
         </View>
 
-        <Text style={{ fontSize: 28, fontWeight: "800", textAlign: "center", color: "#111827", marginBottom: 6 }}>
+        <Text
+          style={{
+            fontSize: 28,
+            fontWeight: "800",
+            textAlign: "center",
+            color: "#111827",
+            marginBottom: 6,
+          }}
+        >
           INICIAR SESIÓN
         </Text>
-        <Text style={{ textAlign: "center", color: "#6B7280", marginBottom: 18 }}>Accede a tu cuenta de Parkado</Text>
+        <Text
+          style={{
+            textAlign: "center",
+            color: "#6B7280",
+            marginBottom: 18,
+          }}
+        >
+          Accede a tu cuenta de Parkado
+        </Text>
 
         <View style={{ gap: 16 }}>
           <View>
-            <Text style={{ fontSize: 12, fontWeight: "800", color: "#B2A83F", marginBottom: 6 }}>CORREO ELECTRÓNICO</Text>
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: "800",
+                color: "#B2A83F",
+                marginBottom: 6,
+              }}
+            >
+              CORREO ELECTRÓNICO
+            </Text>
             <TextInput
               placeholder="ejemplo@correo.com"
               keyboardType="email-address"
-              style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 8, padding: 12, backgroundColor: "white" }}
+              style={{
+                borderWidth: 1,
+                borderColor: "#E5E7EB",
+                borderRadius: 8,
+                padding: 12,
+                backgroundColor: "white",
+              }}
               value={correo}
               onChangeText={setCorreo}
               autoCapitalize="none"
@@ -507,8 +517,26 @@ export default function LoginUsuario({ navigation }: any) {
           </View>
 
           <View>
-            <Text style={{ fontSize: 12, fontWeight: "800", color: "#B2A83F", marginBottom: 6 }}>CONTRASEÑA</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 8, backgroundColor: "white" }}>
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: "800",
+                color: "#B2A83F",
+                marginBottom: 6,
+              }}
+            >
+              CONTRASEÑA
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: "#E5E7EB",
+                borderRadius: 8,
+                backgroundColor: "white",
+              }}
+            >
               <TextInput
                 placeholder="Ingrese su contraseña"
                 secureTextEntry={!showPassword}
@@ -516,8 +544,15 @@ export default function LoginUsuario({ navigation }: any) {
                 value={password}
                 onChangeText={setPassword}
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ paddingHorizontal: 12 }}>
-                <Ionicons name={showPassword ? "eye-off" : "eye"} size={22} color="#B2A83F" />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={{ paddingHorizontal: 12 }}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off" : "eye"}
+                  size={22}
+                  color="#B2A83F"
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -534,14 +569,25 @@ export default function LoginUsuario({ navigation }: any) {
           disabled={isLoading}
           onPress={handleLogin}
         >
-          <Text style={{ color: "white", fontWeight: "800", fontSize: 16 }}>
+          <Text
+            style={{ color: "white", fontWeight: "800", fontSize: 16 }}
+          >
             {isLoading ? "Ingresando..." : "INGRESAR"}
           </Text>
         </TouchableOpacity>
 
         {/* Botón que ahora muestra Registro inline */}
-        <TouchableOpacity onPress={() => setShowRegister(true)} style={{ marginTop: 16 }}>
-          <Text style={{ textAlign: "center", color: "#B2A83F", fontWeight: "700" }}>
+        <TouchableOpacity
+          onPress={() => setShowRegister(true)}
+          style={{ marginTop: 16 }}
+        >
+          <Text
+            style={{
+              textAlign: "center",
+              color: "#B2A83F",
+              fontWeight: "700",
+            }}
+          >
             ¿No tienes una cuenta? Regístrate
           </Text>
         </TouchableOpacity>

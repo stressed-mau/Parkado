@@ -15,7 +15,6 @@ import Logo from "../assets/Logo";
 import ParqueoPorPropietario from "../app/ParqueoPorPropietario";
 
 const BACKEND_BASE = "https://parkado-backend.vercel.app";
-// placeholder remoto (no uses file:///…)
 const placeholderRemote =
   "https://via.placeholder.com/150?text=Sin+imagen";
 
@@ -28,6 +27,9 @@ export default function PerfilAdministrador() {
   const [token, setToken] = useState<string | null>(null);
 
   const [showParqueosOwnerView, setShowParqueosOwnerView] = useState(false);
+
+  // 👇 BANDERA: true si el usuario es CONDUCTOR
+  const [esConductor, setEsConductor] = useState<boolean | null>(null);
 
   const colores = {
     azul: "#7BB3CD",
@@ -51,7 +53,7 @@ export default function PerfilAdministrador() {
 
         const userData = JSON.parse(raw);
         const id = userData?.id;
-        const storedToken = userData?.token;
+        const storedToken = userData?.token ?? null;
 
         if (!id) {
           Alert.alert("Error", "ID de usuario no encontrado en storage.");
@@ -61,7 +63,7 @@ export default function PerfilAdministrador() {
 
         if (mounted) {
           setUserId(id);
-          setToken(storedToken ?? null);
+          setToken(storedToken);
         }
 
         // 1) perfil
@@ -74,7 +76,22 @@ export default function PerfilAdministrador() {
                 : undefined,
             }
           );
-          if (perfilResp?.data && mounted) setUsuario(perfilResp.data);
+          if (perfilResp?.data && mounted) {
+            const perfil = perfilResp.data;
+            setUsuario(perfil);
+
+            // 🔍 detectar rol con la misma lógica que en Login
+            const roleField =
+              perfil?.rol ??
+              perfil?.role ??
+              perfil?.roles ??
+              userData?.role ??
+              userData?.roles ??
+              null;
+
+            const esCond = isRoleConductor(roleField);
+            setEsConductor(esCond);
+          }
         } catch (e) {
           console.warn("No se pudo obtener perfil (no crítico)", e);
         }
@@ -200,13 +217,16 @@ export default function PerfilAdministrador() {
         </View>
       </View>
 
-      {/* Botón Administrar parqueos */}
-      <TouchableOpacity
-        style={styles.manageButton}
-        onPress={() => setShowParqueosOwnerView(true)}
-      >
-        <Text style={styles.manageText}>Administrar parqueos</Text>
-      </TouchableOpacity>
+      {/* 🔥 Botón Administrar parqueos: SOLO si NO es conductor */}
+      {esConductor === false && (
+        <TouchableOpacity
+          style={styles.manageButton}
+          onPress={() => setShowParqueosOwnerView(true)}
+        >
+          <Text style={styles.manageText}>Administrar parqueos</Text>
+        </TouchableOpacity>
+      )}
+
 
       {/* Lista de reservas */}
       <View style={styles.listContainer}>
@@ -285,6 +305,53 @@ export default function PerfilAdministrador() {
   );
 }
 
+/* ====== helpers de rol (misma idea que en Login) ====== */
+function isRoleConductor(roleField: any): boolean {
+  if (!roleField) return false;
+
+  const includesConductor = (val: string) => {
+    const v = val.toLowerCase();
+    return (
+      v.includes("conductor") ||
+      v.includes("chofer") ||
+      v.includes("driver")
+    );
+  };
+
+  if (typeof roleField === "string") {
+    return includesConductor(roleField);
+  }
+
+  if (Array.isArray(roleField)) {
+    return roleField.some((item) => {
+      if (!item) return false;
+      if (typeof item === "string") return includesConductor(item);
+      if (typeof item === "object") {
+        const label =
+          item.nombre ||
+          item.name ||
+          item.role ||
+          item.rol ||
+          JSON.stringify(item);
+        return includesConductor(String(label));
+      }
+      return false;
+    });
+  }
+
+  if (typeof roleField === "object") {
+    const label =
+      roleField.nombre ||
+      roleField.name ||
+      roleField.role ||
+      roleField.rol ||
+      JSON.stringify(roleField);
+    return includesConductor(String(label));
+  }
+
+  return false;
+}
+
 /* helpers: misma lógica que en ParqueoPorPropietario */
 function resolveImageUrl(raw: any, backendBase: string, placeholder: string) {
   if (!raw) return placeholder;
@@ -345,7 +412,7 @@ function ImageFallback({ uri, placeholderRemote }: any) {
 
   const buildSource = (u: any) => {
     if (!u) return null;
-    if (typeof u === "number") return u; // require(...)
+    if (typeof u === "number") return u;
     return { uri: String(u) };
   };
 

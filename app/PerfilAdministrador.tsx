@@ -11,23 +11,24 @@ import {
   Alert,
   StyleSheet,
 } from "react-native";
-// no more useRouter
 import Logo from "../assets/Logo";
-import ParqueoPorPropietario from "../app/ParqueoPorPropietario"; // componente externo que muestra parqueos del owner
+import ParqueoPorPropietario from "../app/ParqueoPorPropietario";
 
 const BACKEND_BASE = "https://parkado-backend.vercel.app";
-const placeholderLocal = "file:///mnt/data/e6160939-b67a-4a41-8e50-9802c507f7e1.png";
+// placeholder remoto (no uses file:///…)
+const placeholderRemote =
+  "https://via.placeholder.com/150?text=Sin+imagen";
 
 export default function PerfilAdministrador() {
-  // estado perfil
   const [usuario, setUsuario] = useState<any>(null);
   const [reservas, setReservas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // control para mostrar vista inline de parqueos del propietario
+  const [userId, setUserId] = useState<number | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+
   const [showParqueosOwnerView, setShowParqueosOwnerView] = useState(false);
 
-  // colores (coherentes con tu app)
   const colores = {
     azul: "#7BB3CD",
     naranja: "#FD721D",
@@ -50,7 +51,7 @@ export default function PerfilAdministrador() {
 
         const userData = JSON.parse(raw);
         const id = userData?.id;
-        const token = userData?.token;
+        const storedToken = userData?.token;
 
         if (!id) {
           Alert.alert("Error", "ID de usuario no encontrado en storage.");
@@ -58,22 +59,39 @@ export default function PerfilAdministrador() {
           return;
         }
 
+        if (mounted) {
+          setUserId(id);
+          setToken(storedToken ?? null);
+        }
+
         // 1) perfil
         try {
-          const perfilResp = await axios.get(`${BACKEND_BASE}/api/usuarios/${id}`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          });
+          const perfilResp = await axios.get(
+            `${BACKEND_BASE}/api/usuarios/${id}`,
+            {
+              headers: storedToken
+                ? { Authorization: `Bearer ${storedToken}` }
+                : undefined,
+            }
+          );
           if (perfilResp?.data && mounted) setUsuario(perfilResp.data);
         } catch (e) {
           console.warn("No se pudo obtener perfil (no crítico)", e);
         }
 
-        // 2) reservas (para mostrar abajo)
+        // 2) reservas
         try {
-          const reservasResp = await axios.get(`${BACKEND_BASE}/api/reservas/usuario/${id}`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          });
-          const arr = Array.isArray(reservasResp.data) ? reservasResp.data : reservasResp.data?.data || [];
+          const reservasResp = await axios.get(
+            `${BACKEND_BASE}/api/reservas/usuario/${id}`,
+            {
+              headers: storedToken
+                ? { Authorization: `Bearer ${storedToken}` }
+                : undefined,
+            }
+          );
+          const arr = Array.isArray(reservasResp.data)
+            ? reservasResp.data
+            : reservasResp.data?.data || [];
           if (mounted) setReservas(arr);
         } catch (e) {
           console.warn("No se pudieron cargar reservas", e);
@@ -91,27 +109,32 @@ export default function PerfilAdministrador() {
     };
   }, []);
 
-  // Función para cancelar la reserva y actualizar el estado de la plaza
-  const cancelarReserva = async (reservaId, plazaId) => {
+  // cancelar reserva + actualizar plaza
+  const cancelarReserva = async (reservaId: any, plazaId: any) => {
     try {
+      if (!userId || !token) {
+        Alert.alert(
+          "Error",
+          "No se encontró información de usuario para cancelar."
+        );
+        return;
+      }
+
       setLoading(true);
 
-      // Realizamos la solicitud para cancelar la reserva
       await axios.delete(`${BACKEND_BASE}/api/reservas/${reservaId}`, {
-        headers: { Authorization: `Bearer ${usuario.token}` },
-        data: { usuarioId: usuario.id }
+        headers: { Authorization: `Bearer ${token}` },
+        data: { usuarioId: userId },
       });
 
-      // Luego, actualizamos el estado de la plaza a "DISPONIBLE"
       await axios.patch(`${BACKEND_BASE}/api/plazas/${plazaId}`, {
-        userId: usuario.id,
-        estado: "DISPONIBLE"
+        userId: userId,
+        estado: "DISPONIBLE",
       });
 
-      // Refrescamos las reservas después de la cancelación
-      const RESERVAS_API = `${BACKEND_BASE}/api/reservas/usuario/${usuario.id}`;
+      const RESERVAS_API = `${BACKEND_BASE}/api/reservas/usuario/${userId}`;
       const resReservas = await axios.get(RESERVAS_API, {
-        headers: { Authorization: `Bearer ${usuario.token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const array = Array.isArray(resReservas.data)
         ? resReservas.data
@@ -127,13 +150,13 @@ export default function PerfilAdministrador() {
     }
   };
 
-  // Si el usuario pulsó "Administrar parqueos", mostramos la vista externa inline
+  // vista inline de parqueos del owner
   if (showParqueosOwnerView) {
     return (
       <ParqueoPorPropietario
-        ownerId={usuario?.id ?? 2}
+        ownerId={usuario?.id ?? userId ?? 2}
         onClose={() => setShowParqueosOwnerView(false)}
-        placeholderRemote={placeholderLocal || undefined}
+        placeholderRemote={placeholderRemote}
       />
     );
   }
@@ -170,22 +193,22 @@ export default function PerfilAdministrador() {
           <Text style={styles.icon}>✉️</Text>
           <View>
             <Text style={styles.smallLabel}>Correo electrónico</Text>
-            <Text style={styles.text}>{usuario?.correoElectronico || usuario?.email || "N/D"}</Text>
+            <Text style={styles.text}>
+              {usuario?.correoElectronico || usuario?.email || "N/D"}
+            </Text>
           </View>
         </View>
       </View>
 
-      {/* Botón Administrar parqueos (ahora muestra inline la vista Parc. por propietario) */}
+      {/* Botón Administrar parqueos */}
       <TouchableOpacity
-        style={[styles.manageButton]}
-        onPress={() => {
-          setShowParqueosOwnerView(true);
-        }}
+        style={styles.manageButton}
+        onPress={() => setShowParqueosOwnerView(true)}
       >
         <Text style={styles.manageText}>Administrar parqueos</Text>
       </TouchableOpacity>
 
-      {/* Lista de reservas / tarjetas */}
+      {/* Lista de reservas */}
       <View style={styles.listContainer}>
         {reservas.length === 0 ? (
           <View style={styles.card}>
@@ -194,13 +217,26 @@ export default function PerfilAdministrador() {
         ) : (
           reservas.map((r) => {
             const parqueo = r?.plaza?.parqueo || r?.parqueo || null;
+
             const rawImagen =
-              parqueo?.foto || parqueo?.imagen || parqueo?.imagenUrl || parqueo?.fotos?.[0] || null;
-            const imagen = resolveImageUrl(rawImagen, BACKEND_BASE, placeholderLocal);
-            const nombre = parqueo?.nombre || "Borrón la base";
-            const direccion = parqueo?.direccion || "Dirección seleccionada en mapa";
+              parqueo?.fotos ||
+              parqueo?.foto ||
+              parqueo?.imagen ||
+              parqueo?.imagenUrl ||
+              null;
+
+            const imagen = resolveImageUrl(
+              rawImagen,
+              BACKEND_BASE,
+              placeholderRemote
+            );
+
+            const nombre = parqueo?.nombre || "Parqueo sin nombre";
+            const direccion =
+              parqueo?.direccion || "Dirección no disponible aún";
             const nroPlaza = r?.plaza?.nroPlaza || r?.nroPlaza || "N/A";
-            const matricula = r?.matriculaVehiculo || r?.vehiculo?.placa || "N/D";
+            const matricula =
+              r?.matriculaVehiculo || r?.vehiculo?.placa || "N/D";
             const desde = r?.fechaHoraIni ? formatDate(r.fechaHoraIni) : "--";
             const hasta = r?.fechaHoraFin ? formatDate(r.fechaHoraFin) : "--";
             const key = r?.id || r?._id || Math.random().toString();
@@ -208,20 +244,30 @@ export default function PerfilAdministrador() {
             return (
               <View key={key} style={styles.card}>
                 <View style={styles.cardRow}>
-                  <Image
-                    source={{ uri: imagen }}
-                    style={styles.cardImage}
-                    resizeMode="cover"
-                    onError={() => {}}
+                  <ImageFallback
+                    uri={imagen}
+                    placeholderRemote={placeholderRemote}
                   />
+
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>{nombre}</Text>
                     <Text style={styles.cardSubtitle}>{direccion}</Text>
 
-                    <Text style={styles.cardSmall}><Text style={{ fontWeight: "700" }}>Plaza:</Text> {nroPlaza}</Text>
-                    <Text style={styles.cardSmall}><Text style={{ fontWeight: "700" }}>Matrícula:</Text> {matricula}</Text>
-                    <Text style={styles.cardSmall}><Text style={{ fontWeight: "700" }}>Desde:</Text> {desde}</Text>
-                    <Text style={styles.cardSmall}><Text style={{ fontWeight: "700" }}>Hasta:</Text> {hasta}</Text>
+                    <Text style={styles.cardSmall}>
+                      <Text style={{ fontWeight: "700" }}>Plaza:</Text>{" "}
+                      {nroPlaza}
+                    </Text>
+                    <Text style={styles.cardSmall}>
+                      <Text style={{ fontWeight: "700" }}>Matrícula:</Text>{" "}
+                      {matricula}
+                    </Text>
+                    <Text style={styles.cardSmall}>
+                      <Text style={{ fontWeight: "700" }}>Desde:</Text> {desde}
+                    </Text>
+                    <Text style={styles.cardSmall}>
+                      <Text style={{ fontWeight: "700" }}>Hasta:</Text> {hasta}
+                    </Text>
+
                     <TouchableOpacity
                       onPress={() => cancelarReserva(r?.id, r?.plaza?.id)}
                       style={styles.cancelButton}
@@ -239,20 +285,29 @@ export default function PerfilAdministrador() {
   );
 }
 
-/* helpers */
-function resolveImageUrl(url: any, base: string, fallback: string) {
-  if (!url) return fallback;
-  const uri = String(url).trim();
-  if (
-    uri.startsWith("http://") ||
-    uri.startsWith("https://") ||
-    uri.startsWith("data:") ||
-    uri.startsWith("file://")
-  ) {
-    return uri;
+/* helpers: misma lógica que en ParqueoPorPropietario */
+function resolveImageUrl(raw: any, backendBase: string, placeholder: string) {
+  if (!raw) return placeholder;
+  if (Array.isArray(raw)) {
+    const first = raw.find(Boolean);
+    return resolveImageUrl(first, backendBase, placeholder);
   }
-  const sep = uri.startsWith("/") ? "" : "/";
-  return `${base}${sep}${uri}`;
+  if (typeof raw === "object" && raw !== null) {
+    const possible = raw.url || raw.uri || raw.path || raw.filename;
+    return resolveImageUrl(possible, backendBase, placeholder);
+  }
+  const trimmed = String(raw).trim();
+  if (!trimmed) return placeholder;
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("file://")
+  ) {
+    return trimmed;
+  }
+  const sep = trimmed.startsWith("/") ? "" : "/";
+  return `${backendBase}${sep}${trimmed}`;
 }
 
 function formatDate(iso: any) {
@@ -269,26 +324,102 @@ function formatDate(iso: any) {
   }
 }
 
+/* ImageFallback reutilizable */
+function ImageFallback({ uri, placeholderRemote }: any) {
+  const normalize = (u: any) => {
+    if (!u) return null;
+    if (Array.isArray(u)) return u.find(Boolean) || null;
+    if (typeof u === "object") return u.url || u.uri || null;
+    return String(u);
+  };
+
+  const initial = normalize(uri) || placeholderRemote || null;
+  const [src, setSrc] = React.useState<any>(initial);
+  const [loading, setLoading] = React.useState<boolean>(Boolean(initial));
+
+  React.useEffect(() => {
+    const next = normalize(uri) || placeholderRemote || null;
+    setLoading(Boolean(next));
+    setSrc(next);
+  }, [uri, placeholderRemote]);
+
+  const buildSource = (u: any) => {
+    if (!u) return null;
+    if (typeof u === "number") return u; // require(...)
+    return { uri: String(u) };
+  };
+
+  const isLocalAsset = typeof src === "number";
+
+  return (
+    <View
+      style={{
+        width: 64,
+        height: 64,
+        borderRadius: 8,
+        overflow: "hidden",
+        backgroundColor: "#f2f2f2",
+        marginRight: 12,
+      }}
+    >
+      {loading && (
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <ActivityIndicator />
+        </View>
+      )}
+
+      {src ? (
+        <Image
+          source={isLocalAsset ? src : buildSource(src)}
+          style={{ width: 64, height: 64 }}
+          resizeMode="cover"
+          onLoad={() => setLoading(false)}
+          onError={() => {
+            if (placeholderRemote && src !== placeholderRemote) {
+              setSrc(placeholderRemote);
+              setLoading(true);
+            } else {
+              setSrc(null);
+              setLoading(false);
+            }
+          }}
+        />
+      ) : (
+        <View
+          style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+        >
+          <Text style={{ fontSize: 24 }}>📷</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { padding: 18 },
   infoBlock: { paddingHorizontal: 18, paddingBottom: 8 },
   label: { color: "#6B7280", fontSize: 14, marginBottom: 6 },
-  name: { fontSize: 26, fontWeight: "800", marginBottom: 12, color: "#111827" },
+  name: {
+    fontSize: 26,
+    fontWeight: "800",
+    marginBottom: 12,
+    color: "#111827",
+  },
   row: { flexDirection: "row", alignItems: "center", marginTop: 10 },
   icon: { fontSize: 22, marginRight: 10 },
   smallLabel: { fontWeight: "700" },
   text: { color: "#374151" },
-
-  bigButton: {
-    marginHorizontal: 18,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 12,
-    marginBottom: 10,
-  },
-  bigButtonText: { color: "white", fontSize: 18, fontWeight: "800" },
 
   manageButton: {
     marginHorizontal: 40,
@@ -316,7 +447,6 @@ const styles = StyleSheet.create({
     borderColor: "#E6E6E6",
   },
   cardRow: { flexDirection: "row", alignItems: "center" },
-  cardImage: { width: 64, height: 64, borderRadius: 8, marginRight: 12, backgroundColor: "#f2f2f2" },
   cardTitle: { fontWeight: "800", fontSize: 16 },
   cardSubtitle: { color: "#6B7280", marginTop: 4 },
   cardSmall: { color: "#374151", marginTop: 6 },

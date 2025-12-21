@@ -3,6 +3,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
@@ -103,15 +104,15 @@ export default function EditarParqueo({ route, onClose }: Props) {
       // Mapear datos del API al formulario
       setForm({
         nombre: data.nombre || "",
-        telefono: "",
+        telefono: "", // lo quitaste, lo dejamos vacío intencionalmente
         direccion: data.direccion || "",
         capacidadAutos: data.capacidades?.find((c: any) => c.tipoVehiculoId === 1)?.cantidad?.toString() || "",
         capacidadMotos: data.capacidades?.find((c: any) => c.tipoVehiculoId === 2)?.cantidad?.toString() || "",
-        tarifaAutos: data.tarifas?.find((t: any) => t.tipoVehiculoId === 1 && t.descripcion?.includes("Hora"))?.precioHora?.toString() || "",
-        tarifaMotos: data.tarifas?.find((t: any) => t.tipoVehiculoId === 2 && t.descripcion?.includes("Hora"))?.precioHora?.toString() || "",
-        tarifaAutosDia: data.tarifas?.find((t: any) => t.tipoVehiculoId === 1 && t.descripcion?.includes("Día"))?.precioHora?.toString() || "",
-        tarifaMotosDia: data.tarifas?.find((t: any) => t.tipoVehiculoId === 2 && t.descripcion?.includes("Día"))?.precioHora?.toString() || "",
-        tipoLugar: data.tipolugar?.toLowerCase() === "lote" ? "un_piso" : "edificio",
+        tarifaAutos: data.tarifas?.find((t: any) => t.tipoVehiculoId === 1 && String(t.descripcion || "").toLowerCase().includes("hora"))?.precioHora?.toString() || "",
+        tarifaMotos: data.tarifas?.find((t: any) => t.tipoVehiculoId === 2 && String(t.descripcion || "").toLowerCase().includes("hora"))?.precioHora?.toString() || "",
+        tarifaAutosDia: data.tarifas?.find((t: any) => t.tipoVehiculoId === 1 && String(t.descripcion || "").toLowerCase().includes("día"))?.precioHora?.toString() || "",
+        tarifaMotosDia: data.tarifas?.find((t: any) => t.tipoVehiculoId === 2 && String(t.descripcion || "").toLowerCase().includes("día"))?.precioHora?.toString() || "",
+        tipoLugar: (data.tipoLugar || (data.tipolugar ?? "")).toString().toLowerCase() === "lote" ? "un_piso" : ((data.tipoLugar || data.tipolugar) ? "edificio" : ""),
         latitud: data.latitud?.toString() || "",
         longitud: data.longitud?.toString() || "",
         horarios: mapearHorariosAPI(data.horarios || []),
@@ -125,9 +126,38 @@ export default function EditarParqueo({ route, onClose }: Props) {
 
       // Fotos existentes
       if (data.fotos && data.fotos.length > 0) {
-        setFotosExistentes(data.fotos.map((f: any) => f.url));
+        const urls = data.fotos.map((f: any) => f.url);
+        setFotosExistentes(urls);
+
+        // Foto principal (por convención la primera)
         if (data.fotos[0]?.url) {
           setFotoUri(data.fotos[0].url);
+        }
+
+        // --- NUEVO: intentar detectar licencia ---
+        // 1) buscar en la URL palabras clave tipo 'licencia', 'license', 'permiso'
+        // 2) si no hay coincidencia, usar el segundo elemento (index 1) si existe
+        const licenciaPattern = /licen(cia|se)|permiso|license/i;
+        let licenciaFound: string | null = null;
+
+        for (const f of data.fotos) {
+          if (f?.url && licenciaPattern.test(f.url)) {
+            licenciaFound = f.url;
+            break;
+          }
+        }
+
+        if (!licenciaFound) {
+          // fallback: si hay más de 1 foto, asumir que la segunda es la licencia
+          if (data.fotos[1]?.url) licenciaFound = data.fotos[1].url;
+        }
+
+        if (licenciaFound) {
+          console.log("✅ Licencia detectada y asignada:", licenciaFound);
+          setLicenciaUri(licenciaFound);
+        } else {
+          console.log("⚠️ No se detectó una licencia en data.fotos (se usarán archivos locales si el usuario sube)");
+          setLicenciaUri(null);
         }
       }
 
@@ -163,13 +193,15 @@ export default function EditarParqueo({ route, onClose }: Props) {
         "LUNES": "lunes",
         "MARTES": "martes",
         "MIERCOLES": "miercoles",
+        "MIÉRCOLES": "miercoles",
         "JUEVES": "jueves",
         "VIERNES": "viernes",
         "SABADO": "sabado",
+        "SÁBADO": "sabado",
         "DOMINGO": "domingo"
       };
 
-      const diaKey = diaMap[horario.diaSemana?.toUpperCase()];
+      const diaKey = diaMap[String(horario.diaSemana || "").toUpperCase()];
       if (diaKey) {
         horariosBase[diaKey as keyof typeof horariosBase] = {
           abierto: !horario.esCerrado,
@@ -556,23 +588,38 @@ export default function EditarParqueo({ route, onClose }: Props) {
       contentContainerStyle={{ paddingBottom: insets.bottom + 6 }}
       keyboardShouldPersistTaps="handled"
     >
+
+{/* 🔙 BOTÓN VOLVER (si viene onClose) */}
+{onClose && (
+  <TouchableOpacity
+    onPress={onClose}
+    style={{
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      marginBottom: 20,
+    }}
+  >
+    <MaterialCommunityIcons
+      name="arrow-left-circle"
+      size={26}
+      color="#1f2937"
+      style={{ marginRight: 6 }}
+    />
+    <Text style={{ fontWeight: "700", fontSize: 16 }}>
+      Volver
+    </Text>
+  </TouchableOpacity>
+)}
+
+
       <Logo />
       <Text className="text-2xl font-bold text-center mb-4" style={{ color: "#F2BD2B" }}>
         EDITAR ESTACIONAMIENTO
       </Text>
 
 {/* Botón Volver */}
-    <TouchableOpacity
-      onPress={onClose} // Esto cierra el formulario y te lleva de regreso
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: 20,
-      }}
-    >
-      <Text style={{ fontSize: 26, marginRight: 6 }}>⬅️</Text>
-      <Text style={{ fontWeight: "700", fontSize: 16 }}>Volver</Text>
-    </TouchableOpacity>
+    
 
       {/* Nombre */}
       <View className="mb-4">
@@ -606,7 +653,7 @@ export default function EditarParqueo({ route, onClose }: Props) {
 
       {/* Tel/Capacidades/Tarifas */}
       {[
-        ["telefono", "Teléfono", "phone-pad"],
+        
         ["capacidadAutos", "Capacidad total de autos", "numeric"],
         ["capacidadMotos", "Capacidad total de motos", "numeric"],
         ["tarifaAutos", "Tarifa autos/hora (Bs)", "numeric"],
@@ -858,10 +905,10 @@ export default function EditarParqueo({ route, onClose }: Props) {
         <Button 
           mode="outlined" 
           onPress={() => setPagina(1)} 
-          style={{ borderColor: "#FD721D", width: "48%" }} 
-          labelStyle={{ color: "#FD721D" }}
+          style={{ borderColor: "#7BB3CD", width: "48%" }} 
+          labelStyle={{ color: "#7BB3CD" }}
         >
-          ← Atrás
+          Atrás
         </Button>
 
         <Button 
@@ -871,7 +918,7 @@ export default function EditarParqueo({ route, onClose }: Props) {
           loading={updating}
           disabled={updating}
         >
-          {updating ? "Actualizando..." : "✅ Actualizar"}
+          {updating ? "Actualizando..." : "Actualizar"}
         </Button>
       </View>
     </ScrollView>

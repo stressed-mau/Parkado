@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator } fro
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 interface UserData {
     id: string;
     email: string;
@@ -195,8 +195,8 @@ export default function PagoTarjetaScreen() {
             console.log("PAGO TARJETA: Proceso completado exitosamente");
 
             Alert.alert(
-                "✅ ¡Pago con Tarjeta Exitoso!",
-                `Reserva creada exitosamente:\n\n• Parqueo: ${reservaData.parqueoNombre}\n• Plaza: ${reservaData.nroPlazaReal}\n• Vehículo: ${reservaData.tipoVehiculo} (${reservaData.matricula})\n• Horario: ${new Date(reservaData.fechaInicioISO).toLocaleString()} - ${new Date(reservaData.fechaFinISO).toLocaleString()}\n• Costo: ${reservaData.costoTotal} Bs\n• Método: Tarjeta\n• ID Reserva: ${reservaCreada.id}`,
+                "¡Pago con Tarjeta Exitoso!",
+                `Reserva creada exitosamente:\n\n• Parqueo: ${reservaData.parqueoNombre}\n• Plaza: ${reservaData.nroPlazaReal}\n• Vehículo: ${reservaData.tipoVehiculo} (${reservaData.matricula})\n• Horario: ${new Date(reservaData.fechaInicioISO).toLocaleString()} - ${new Date(reservaData.fechaFinISO).toLocaleString()}\n• Costo: ${reservaData.costoTotal} Bs\n• Método: Tarjeta\n`,
                 [{
                     text: "Ver Ruta en Mapa",
                     onPress: () => {
@@ -257,7 +257,7 @@ export default function PagoTarjetaScreen() {
                     <Feather name="x" size={28} color="black" />
                 </TouchableOpacity>
                 <View className="items-center mt-6">
-                    <FontAwesome5 name="credit-card" size={48} color="#7BB5CB" />
+                    <FontAwesome5 name="credit-card" size={48} color="#FD721D" />
                     <Text className="text-2xl font-bold text-black mt-3">Pago con Tarjeta</Text>
                     <Text className="text-sm text-gray-600 mt-1">Ingrese los detalles de su tarjeta</Text>
                 </View>
@@ -266,25 +266,25 @@ export default function PagoTarjetaScreen() {
             {/* Contenido principal */}
             <View className="flex-1 px-5 mt-6">
                 {/* Info del parqueo */}
-                <View className="w-full bg-white rounded-xl p-4 mb-5 shadow border border-[#7BB5CB]/20">
+                <View className="w-full bg-white rounded-xl p-4 mb-5 shadow border border-[#FD721D]/20">
                     <View className="flex-row items-center mb-2">
-                        <Feather name="map-pin" size={18} color="#7BB5CB" />
+                        <Feather name="map-pin" size={18} color="#FD721D" />
                         <Text className="text-base font-semibold text-black ml-2">{reservaData.parqueoNombre}</Text>
                     </View>
                     <View className="flex-row items-center mb-2">
-                        <Feather name="square" size={18} color="#7BB5CB" />
+                        <Feather name="square" size={18} color="#FD721D" />
                         <Text className="text-sm text-black ml-2">
                             Plaza: <Text className="font-bold">{reservaData.nroPlazaReal}</Text>
                         </Text>
                     </View>
                     <View className="flex-row items-center mb-2">
-                        <Feather name="truck" size={18} color="#7BB5CB" />
+                        <Feather name="truck" size={18} color="#FD721D" />
                         <Text className="text-sm text-black ml-2">
                             Vehículo: <Text className="font-bold">{reservaData.matricula}</Text>
                         </Text>
                     </View>
                     <View className="flex-row items-center">
-                        <Feather name="clock" size={18} color="#7BB5CB" />
+                        <Feather name="clock" size={18} color="#FD721D" />
                         <Text className="text-sm text-black ml-2">
                             Horario: <Text className="font-bold">
                                 {new Date(reservaData.fechaInicioISO).toLocaleTimeString('es-BO', { 
@@ -406,7 +406,7 @@ export default function PagoTarjetaScreen() {
 
                 {/* Mensaje de seguridad */}
                 <View className="flex-row items-center justify-center mt-4">
-                    <Feather name="shield" size={16} color="#7BB5CB" />
+                    <Feather name="shield" size={16} color="#FD721D" />
                     <Text className="text-xs text-black/70 ml-2">Pago 100% seguro y encriptado</Text>
                 </View>
             </View>

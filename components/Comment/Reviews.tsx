@@ -12,7 +12,12 @@ import {
 } from 'react-native';
 // Uso un import genérico para iconos y luego intento usar fuentes conocidas
 import * as VectorIcons from '@expo/vector-icons';
-import { getCalificacionesByParqueo, postCalificacion } from "@/api/CommentApi";
+import {
+  getCalificacionesByParqueo,
+  postCalificacion,
+  deleteCalificacion,
+} from "@/api/CommentApi";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // IMPORT GUARD: intenta importar StarRating pero si no es función usamos fallback
@@ -40,7 +45,9 @@ interface ReviewsModalProps {
   visible: boolean;
   onClose: () => void;
   parqueoId: number;
+  onReviewSubmitted?: () => void; // 👈 NUEVO
 }
+
 
 const SimpleStarFallback: React.FC<{ rating: number; size?: number }> = ({ rating }) => (
   <Text style={{ color: '#F2BD2B', fontSize: 18 }}>{'★'.repeat(Math.round(rating))}</Text>
@@ -49,8 +56,10 @@ const SimpleStarFallback: React.FC<{ rating: number; size?: number }> = ({ ratin
 const ReviewsModal: React.FC<ReviewsModalProps> = ({
   visible,
   onClose,
-  parqueoId
+  parqueoId,
+  onReviewSubmitted,
 }) => {
+
   const [userRating, setUserRating] = useState(0);
   const [comment, setComment] = useState('');
   const [allReviews, setAllReviews] = useState<Review[]>([]);
@@ -64,6 +73,33 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
   // icon fallback: intenta usar FontAwesome5, si no está usa Texto
   const IconClose = (VectorIcons as any).FontAwesome5 ? (props: any) => <VectorIcons.FontAwesome5 {...props} /> : null;
   // si quieres otro icono, ajusta aquí
+
+const handleDeleteReview = async (reviewId: string) => {
+  if (!usuarioId) return;
+
+  Alert.alert(
+    "Eliminar reseña",
+    "¿Estás seguro que deseas eliminar tu reseña?",
+    [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Eliminar",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteCalificacion(Number(reviewId), usuarioId);
+            Alert.alert("Éxito", "Reseña eliminada");
+            await loadReviews();
+            onReviewSubmitted?.();
+          } catch (error) {
+            Alert.alert("Error", "No se pudo eliminar la reseña");
+          }
+        },
+      },
+    ]
+  );
+};
+
 
   useEffect(() => {
     const loadUser = async () => {
@@ -171,8 +207,12 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
 
       await loadReviews();
 
-      setUserRating(0);
-      setComment("");
+// 🔥 avisamos al padre que hubo nueva reseña
+onReviewSubmitted?.();
+
+setUserRating(0);
+setComment("");
+
 
     } catch (error) {
       console.error("Error publicando reseña:", error);
@@ -230,6 +270,22 @@ const ReviewsModal: React.FC<ReviewsModalProps> = ({
                           <StarComponent rating={userReview?.rating || 0} />
                         </View>
                         <Text style={{ color: '#333' }}>{userReview?.comment}</Text>
+                        <TouchableOpacity
+  onPress={() => handleDeleteReview(userReview!.id)}
+  style={{
+    marginTop: 10,
+    alignSelf: "flex-end",
+    backgroundColor: "#EF4444",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  }}
+>
+  <Text style={{ color: "white", fontWeight: "700" }}>
+    Eliminar
+  </Text>
+</TouchableOpacity>
+
                       </View>
                     </>
                   ) : (

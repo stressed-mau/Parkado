@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "Parkado",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,6 +12,17 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.bummed_mau.frontend",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "usesCleartextTraffic": true,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCGFlRgINpD5X5TBkVmqgVrUEVYLRSNO-k"
+        }
+      },
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -43,6 +54,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3d2859c4-49bb-45da-9e2a-85d09d2a77b6"
+      }
     }
   }
 }

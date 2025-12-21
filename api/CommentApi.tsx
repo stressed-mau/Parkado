@@ -12,6 +12,25 @@ export const getCalificacionesByParqueo = async (parqueoId: number) => {
   }
 };
 
+export const deleteCalificacion = async (
+  calificacionId: number,
+  usuarioId: number
+) => {
+  try {
+    const response = await axios.delete(
+      `${BASE_URL}/calificaciones/${calificacionId}/${usuarioId}`
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error(
+      "Error al eliminar reseña:",
+      error.response?.data || error
+    );
+    throw error;
+  }
+};
+
+
 export const postCalificacion = async (body: {
   parqueoId: number;
   usuarioId: number;

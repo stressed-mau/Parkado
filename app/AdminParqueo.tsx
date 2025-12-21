@@ -12,17 +12,24 @@ import {
 import ResumenCard from "@/components/Admin/ResumenCard";
 import { getTarifasYPlazas, getPlazas, getReservasPorParqueo } from "../api/parqueoApi";
 import { FontAwesome5 } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import IngresarVehiculo from "./IngresarVehiculo"; // <-- import para mostrar inline
+import { useRef } from "react";
 
-// Ruta local al PDF que subiste (opcional)
-const PLAZA_DOC_PATH = '/mnt/data/patch plaza api.pdf';
 
 type Props = {
   parqueoId?: number;
+  parqueoNombre?: string | null;
   onClose?: () => void;
 };
 
-export default function ParqueoDetalle({ parqueoId = 1, onClose }: Props) {
+export default function ParqueoDetalle({
+  parqueoId = 1,
+  parqueoNombre,
+  onClose,
+}: Props) {
+const WS_URL = "wss://parkado-backend.onrender.com";
+
   const [tarifas, setTarifas] = useState<any[]>([]);
   const [plazas, setPlazas] = useState<any[]>([]);
   const [reservas, setReservas] = useState<any[]>([]);
@@ -32,12 +39,49 @@ export default function ParqueoDetalle({ parqueoId = 1, onClose }: Props) {
   const [vehiculosOpen, setVehiculosOpen] = useState(false);
   const [inconsistencias, setInconsistencias] = useState<any[]>([]);
   const [isReloadingReservas, setIsReloadingReservas] = useState(false);
+const [ultimoSnapshot, setUltimoSnapshot] = useState<{
+  totalReservas: number;
+  plazasOcupadas: number;
+} | null>(null);
+
+
+
+  const wsRef = useRef<WebSocket | null>(null);
+
 
   // nuevo state para mostrar el formulario inline
   const [showIngresar, setShowIngresar] = useState(false);
 
   // ahora usamos la prop parqueoId en lugar de la constante estática
   const idParqueo = parqueoId;
+
+const cargarParqueo = async () => {
+  const res = await fetch(
+    `https://parkado-backend.vercel.app/api/parqueos/details?parqueoId=${parqueoId}`
+  );
+  return res.json();
+};
+
+const cargarSnapshotParqueo = async () => {
+  const res = await fetch(
+    `https://parkado-backend.vercel.app/api/parqueos/details?parqueoId=${parqueoId}`
+  );
+
+  if (!res.ok) throw new Error("Error cargando parqueo");
+
+  const data = await res.json();
+
+  return {
+    plazas: data.plazas || [],
+    reservas: data.reservas || [],
+  };
+};
+
+
+
+
+
+
 
   const cargarDatos = useCallback(async () => {
     try {
@@ -61,10 +105,45 @@ export default function ParqueoDetalle({ parqueoId = 1, onClose }: Props) {
     }
   }, [idParqueo]);
 
-  // Carga inicial
-  useEffect(() => {
-    cargarDatos();
-  }, [cargarDatos]);
+ useEffect(() => {
+  cargarDatos(); // carga plazas reales + tarifas
+}, [cargarDatos]);
+
+
+useEffect(() => {
+  let isMounted = true;
+
+  const verificarCambios = async () => {
+  try {
+    const reservasActuales = await getReservasPorParqueo(idParqueo);
+    const plazasActuales = await getPlazas(idParqueo);
+
+    setReservas(Array.isArray(reservasActuales) ? reservasActuales : []);
+    setPlazas(Array.isArray(plazasActuales) ? plazasActuales : []);
+  } catch (e) {
+    console.error("❌ Error polling:", e);
+  }
+};
+
+
+
+  verificarCambios();
+  const interval = setInterval(verificarCambios, 5000);
+
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+  };
+  
+
+}, [parqueoId, ultimoSnapshot]);
+
+
+
+
+ // Asegúrate de que `parqueoId` sea parte de la dependencia del useEffect
+
+
 
   // Helpers para formateo
   const formatearFecha = (fecha?: string) => {
@@ -96,36 +175,37 @@ export default function ParqueoDetalle({ parqueoId = 1, onClose }: Props) {
     return tn === filter;
   });
 
-  // Estado -> color
-  const getEstadoColor = (estado: string | null | undefined) => {
-    switch ((estado || "DISPONIBLE").toString().toUpperCase()) {
-      case "OCUPADO":
-        return "bg-[#FD721D] border-[#FD721D]";
-      case "RESERVA":
-        return "bg-[#F2BD2B] border-[#F2BD2B]";
-      case "DISPONIBLE":
-      default:
-        return "bg-[#8bb23f] border-[#8bb23f]";
-    }
-  };
+ const getEstadoColor = (estado: string | null | undefined) => {
+  const e = (estado ?? "DISPONIBLE").toString().toUpperCase();
 
-  // --- Cálculo de capacidad y ocupados basado únicamente en plazas (fuente de verdad) ---
-  const capacidadPorTipo = (tipo: "Auto" | "Moto") => {
-    const total = plazas.reduce((acc, p) => {
-      const tn = tipoNombreFrom(p?.tipoVehiculo) ?? tipoNombreFrom(p);
-      if (tn === tipo) return acc + 1;
-      return acc;
-    }, 0);
+  switch (e) {
+    case "OCUPADO":
+      return "bg-red-500 border-red-600";
+    case "RESERVA":
+      return "bg-yellow-400 border-yellow-500";
+    case "DISPONIBLE":
+    default:
+      return "bg-green-500 border-green-600";
+  }
+};
 
-    const ocupados = plazas.reduce((acc, p) => {
-      const tn = tipoNombreFrom(p?.tipoVehiculo) ?? tipoNombreFrom(p);
-      const estado = (p?.estado ?? "").toString().toUpperCase();
-      if (tn === tipo && estado && estado !== "DISPONIBLE") return acc + 1;
-      return acc;
-    }, 0);
+const capacidadPorTipo = (tipo: "Auto" | "Moto") => {
+  const plazasTipo = plazas.filter(p => {
+    const tn = tipoNombreFrom(p?.tipoVehiculo) ?? tipoNombreFrom(p);
+    return tn === tipo;
+  });
 
-    return { total, ocupados };
-  };
+  const total = plazasTipo.length;
+
+  const ocupadas = plazasTipo.filter(p => {
+    const estado = (p?.estado ?? "").toUpperCase();
+    return estado === "OCUPADO" || estado === "RESERVA";
+  }).length;
+
+  return { total, ocupadas };
+};
+
+
 
   // Obtener tarifa por tipo de forma defensiva (buscamos en distintas formas)
   const tarifaPorTipo = (tipo: "Auto" | "Moto") => {
@@ -143,19 +223,23 @@ export default function ParqueoDetalle({ parqueoId = 1, onClose }: Props) {
 
   // Construir tarjetas (auto + moto) usando plazas como fuente de verdad para capacidad/ocupados
   const autoCalc = capacidadPorTipo("Auto");
-  const motoCalc = capacidadPorTipo("Moto");
-  const tarjetaAuto = {
-    tipoNombre: "Auto",
-    plazasTotales: autoCalc.total,
-    plazasOcupadas: autoCalc.ocupados,
-    tarifaHora: tarifaPorTipo("Auto"),
-  };
-  const tarjetaMoto = {
-    tipoNombre: "Moto",
-    plazasTotales: motoCalc.total,
-    plazasOcupadas: motoCalc.ocupados,
-    tarifaHora: tarifaPorTipo("Moto"),
-  };
+const motoCalc = capacidadPorTipo("Moto");
+
+const tarjetaAuto = {
+  tipoNombre: "Auto",
+  plazasTotales: autoCalc.total,
+  plazasOcupadas: autoCalc.ocupadas, // ✅ BIEN
+  tarifaHora: tarifaPorTipo("Auto"),
+};
+
+const tarjetaMoto = {
+  tipoNombre: "Moto",
+  plazasTotales: motoCalc.total,
+  plazasOcupadas: motoCalc.ocupadas, // ✅ BIEN
+  tarifaHora: tarifaPorTipo("Moto"),
+};
+
+
 
   // --- Detección de inconsistencias entre reservas y plazas ---
   useEffect(() => {
@@ -196,6 +280,8 @@ export default function ParqueoDetalle({ parqueoId = 1, onClose }: Props) {
     }
   };
 
+
+  
   // --------------------------
   // RENDER: si showIngresar es true mostramos el formulario inline,
   // si no mostramos la UI normal del parqueo.
@@ -218,18 +304,33 @@ export default function ParqueoDetalle({ parqueoId = 1, onClose }: Props) {
       ) : (
         <View className="flex-1 p-6 bg-[#F6EEE4]">
           {/* BOTÓN VOLVER */}
-          {typeof onClose === "function" ? (
-            <TouchableOpacity onPress={() => onClose?.()} className="mb-4">
-              <Text className="text-[#22485A] font-semibold">⬅️ Volver</Text>
-            </TouchableOpacity>
-          ) : null}
+{typeof onClose === "function" ? (
+  <TouchableOpacity
+    onPress={() => onClose?.()}
+    className="mb-4 flex-row items-center"
+  >
+    <MaterialCommunityIcons
+      name="arrow-left-circle"
+      size={26}
+      color="#000000"
+      style={{ marginRight: 6 }}
+    />
+    <Text className="text-black font-semibold text-lg">
+      Volver
+    </Text>
+  </TouchableOpacity>
+) : null}
+
 
           <Text className="text-2xl font-bold my-7 text-[#22485A] self-center">
-            PARQUEO N° {idParqueo}
-          </Text>
+  {parqueoNombre
+    ? ` ${parqueoNombre}`
+    : `PARQUEO N° ${idParqueo}`}
+</Text>
+
   {/* --- Texto solicitado: Vehículos en parqueo --- */}
-          <Text className="text-lg font-semibold text-[#22485A] mb-3">
-            Vehículos en parqueo
+          <Text className="text-xl font-semibold text-[#22485A] mb-3">
+            Plazas ocupadas 
           </Text>
 
           {/* --- Tarjetas resumen basadas en plazas (fuente de verdad) --- */}
@@ -343,9 +444,14 @@ export default function ParqueoDetalle({ parqueoId = 1, onClose }: Props) {
                       style={{ marginHorizontal: 5 }}
                     >
                       <Text className="font-bold text-[#222]">{item.nroPlaza ?? "-"}</Text>
-                      <Text className="text-sm text-[#444]">
-                        {(item.estado ?? "DISPONIBLE").toString().toLowerCase()}
-                      </Text>
+                      <Text
+  numberOfLines={1}
+  ellipsizeMode="clip"
+  className="text-[9px] font-semibold text-white uppercase"
+>
+  {(item.estado ?? "DISPONIBLE").toString()}
+</Text>
+
                     </View>
                   )}
                 />

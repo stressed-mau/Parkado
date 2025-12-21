@@ -1,3 +1,4 @@
+// useParqueoDetalle.ts
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -19,11 +20,11 @@ const formatHour = (timeString: string) => {
     try {
         const [hours, minutes] = timeString.split(':');
         const date = new Date();
-        date.setHours(parseInt(hours), parseInt(minutes));
-        return date.toLocaleTimeString('es-BO', { 
-            hour: '2-digit', 
-            minute: '2-digit', 
-            hour12: true 
+        date.setHours(parseInt(hours, 10), parseInt(minutes, 10));
+        return date.toLocaleTimeString('es-BO', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
         });
     } catch {
         return "N/A";
@@ -36,12 +37,12 @@ const useParqueoStats = (data: ParqueoDetalleAPI | null): UseParqueoStatsReturn 
         if (!data?.calificaciones || data.calificaciones.length === 0) {
             return { averageRating: 0, reviewCount: 0 };
         }
-        
+
         const totalRating = data.calificaciones.reduce((sum, c) => {
             const puntuacion = parseFloat(c.puntuacion) || 0;
             return sum + puntuacion;
         }, 0);
-        
+
         const averageRating = totalRating / data.calificaciones.length;
         return {
             averageRating: parseFloat(averageRating.toFixed(1)),
@@ -50,7 +51,7 @@ const useParqueoStats = (data: ParqueoDetalleAPI | null): UseParqueoStatsReturn 
     }, [data]);
 };
 
-// Hook para procesar datos del parqueo - CORREGIDO
+// Hook para procesar datos del parqueo
 const useParqueoData = (data: ParqueoDetalleAPI | null): UseParqueoDataReturn => {
     return useMemo(() => {
         if (!data) {
@@ -64,28 +65,27 @@ const useParqueoData = (data: ParqueoDetalleAPI | null): UseParqueoDataReturn =>
                 disponibilidadAutos: 0,
                 disponibilidadMotos: 0,
                 serviciosActivos: [],
-                serviciosIds: [], // ✅ AGREGADO
+                serviciosIds: [],
             };
         }
 
         // 1. IMÁGENES
-        const imagenes = data.fotos && data.fotos.length > 0 
+        const imagenes = data.fotos && data.fotos.length > 0
             ? data.fotos.map(foto => foto.url)
             : ['https://via.placeholder.com/400x250?text=No+Image'];
-        
+
         const imagenPrincipal = imagenes[0];
 
-        // 2. TARIFAS - CORREGIDO (sin usar descripcion)
+        // 2. TARIFAS
         let tarifaAuto = 0;
         let tarifaMoto = 0;
 
         if (data.tarifas && data.tarifas.length > 0) {
-            // ✅ CORREGIDO: Buscar solo por tipoVehiculoId
             const tarifaAutoObj = data.tarifas.find(t => t.tipoVehiculoId === 1);
             const tarifaMotoObj = data.tarifas.find(t => t.tipoVehiculoId === 2);
 
-            tarifaAuto = tarifaAutoObj ? parseFloat(tarifaAutoObj.precioHora) : 0;
-            tarifaMoto = tarifaMotoObj ? parseFloat(tarifaMotoObj.precioHora) : 0;
+            tarifaAuto = tarifaAutoObj ? parseFloat(String(tarifaAutoObj.precioHora)) : 0;
+            tarifaMoto = tarifaMotoObj ? parseFloat(String(tarifaMotoObj.precioHora)) : 0;
 
             console.log('💰 Tarifas extraídas:', {
                 auto: tarifaAuto,
@@ -99,32 +99,30 @@ const useParqueoData = (data: ParqueoDetalleAPI | null): UseParqueoDataReturn =>
             tarifaMoto = 4.0;
         }
 
-        // 3. CAPACIDADES TEÓRICAS - CORREGIDO (sin usar descripcion)
+        // 3. CAPACIDADES
         let capacidadAutos = 0;
         let capacidadMotos = 0;
 
         if (data.capacidades && data.capacidades.length > 0) {
-            // ✅ CORREGIDO: Buscar solo por tipoVehiculoId
             const capacidadAutoObj = data.capacidades.find(c => c.tipoVehiculoId === 1);
             const capacidadMotoObj = data.capacidades.find(c => c.tipoVehiculoId === 2);
 
-            capacidadAutos = capacidadAutoObj ? capacidadAutoObj.cantidad : 0;
-            capacidadMotos = capacidadMotoObj ? capacidadMotoObj.cantidad : 0;
+            capacidadAutos = capacidadAutoObj ? Number(capacidadAutoObj.cantidad) : 0;
+            capacidadMotos = capacidadMotoObj ? Number(capacidadMotoObj.cantidad) : 0;
         }
 
-        // 4. DISPONIBILIDAD REAL - CONTAR PLAZAS DISPONIBLES
+        // 4. DISPONIBILIDAD REAL
         let disponibilidadAutos = 0;
         let disponibilidadMotos = 0;
 
         if (data.plazas && data.plazas.length > 0) {
-            // Contar plazas disponibles por tipo
-            const plazasAutoDisponibles = data.plazas.filter(plaza => 
-                plaza.tipoVehiculoId === 1 && 
+            const plazasAutoDisponibles = data.plazas.filter(plaza =>
+                plaza.tipoVehiculoId === 1 &&
                 (plaza.estado === 'DISPONIBLE' || plaza.estado === 'libre' || plaza.estado === null)
             );
-            
-            const plazasMotoDisponibles = data.plazas.filter(plaza => 
-                plaza.tipoVehiculoId === 2 && 
+
+            const plazasMotoDisponibles = data.plazas.filter(plaza =>
+                plaza.tipoVehiculoId === 2 &&
                 (plaza.estado === 'DISPONIBLE' || plaza.estado === 'libre' || plaza.estado === null)
             );
 
@@ -138,33 +136,24 @@ const useParqueoData = (data: ParqueoDetalleAPI | null): UseParqueoDataReturn =>
                 disponiblesMoto: disponibilidadMotos
             });
         } else {
-            // Si no hay plazas definidas, usar capacidades como disponibilidad
             disponibilidadAutos = capacidadAutos;
             disponibilidadMotos = capacidadMotos;
         }
 
-        // 5. SERVICIOS ACTIVOS - ADAPTADO A NUEVA ESTRUCTURA
+        // 5. SERVICIOS ACTIVOS
         let serviciosActivos: any[] = [];
         let serviciosIds: number[] = [];
 
-        // Primero intentar usar serviciosAsociados (nueva estructura)
-        if (data.serviciosAsociados && data.serviciosAsociados.length > 0) {
-            serviciosIds = data.serviciosAsociados;
-            // Convertir IDs a objetos de servicio para la UI
+        if (data.serviciosAsociados && Array.isArray(data.serviciosAsociados) && data.serviciosAsociados.length > 0) {
+            serviciosIds = data.serviciosAsociados.map((id: any) => Number(id)).filter(n => !Number.isNaN(n));
             serviciosActivos = serviciosIds.map(id => ({
-                id: id,
-                servicio: {
-                    id: id,
-                    nombre: `Servicio ${id}`,
-                    descripcion: ''
-                }
+                id,
+                servicio: { id, nombre: `Servicio ${id}`, descripcion: '' }
             }));
             console.log('✅ Usando serviciosAsociados (nueva estructura):', serviciosIds);
-        } 
-        // Si no existe serviciosAsociados, usar la estructura antigua
-        else if (data.servicios && data.servicios.length > 0) {
-            serviciosActivos = data.servicios.filter(s => s.estado);
-            serviciosIds = serviciosActivos.map(s => s.servicioId);
+        } else if (data.servicios && data.servicios.length > 0) {
+            serviciosActivos = data.servicios.filter((s: any) => s.estado);
+            serviciosIds = serviciosActivos.map((s: any) => s.servicioId).filter((n: any) => typeof n === 'number');
             console.log('🔄 Usando servicios (estructura antigua):', serviciosActivos);
         } else {
             console.log('⚠️ No hay servicios definidos');
@@ -197,7 +186,19 @@ const useParqueoData = (data: ParqueoDetalleAPI | null): UseParqueoDataReturn =>
     }, [data]);
 };
 
-// Hook principal para el detalle del parqueo - ACTUALIZADO
+// --- Serializador seguro para params de navegación ---
+function serializeNavigationParams(params: NavigationParams): Record<string, string> {
+    // Convierte todas las propiedades a string y filtra valores nulos/undefined
+    const out: Record<string, string> = {};
+    for (const key of Object.keys(params)) {
+        const v: any = (params as any)[key];
+        if (v === undefined || v === null) continue;
+        out[key] = String(v);
+    }
+    return out;
+}
+
+// Hook principal para el detalle del parqueo
 export default function useParqueoDetalle(): UseParqueoDetalleReturn {
     const { id } = useLocalSearchParams();
     const router = useRouter();
@@ -206,7 +207,7 @@ export default function useParqueoDetalle(): UseParqueoDetalleReturn {
     const [data, setData] = useState<ParqueoDetalleAPI | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [userData, setUserData] = useState<any>(null);
+    const [userData, setUserData] = useState<any>(null); // queda interno, no lo devolvemos
 
     const stats = useParqueoStats(data);
     const processedData = useParqueoData(data);
@@ -223,8 +224,8 @@ export default function useParqueoDetalle(): UseParqueoDetalleReturn {
                 } else {
                     console.log('❌ No hay usuario logueado');
                 }
-            } catch (error) {
-                console.error('Error cargando usuario:', error);
+            } catch (err) {
+                console.error('Error cargando usuario:', err);
             }
         };
 
@@ -244,11 +245,11 @@ export default function useParqueoDetalle(): UseParqueoDetalleReturn {
 
         setIsLoading(true);
         setError(null);
-        
+
         try {
             const url = `https://parkado-backend.vercel.app/api/parqueos/details`;
             console.log(`🌐 HACIENDO FETCH A: ${url}`);
-            
+
             const response = await fetch(url);
 
             if (!response.ok) {
@@ -277,8 +278,8 @@ export default function useParqueoDetalle(): UseParqueoDetalleReturn {
             setData(parqueoEncontrado);
 
         } catch (err: any) {
-            console.error("❌ ERROR DURANTE EL FETCH:", err.message);
-            setError(err.message || "Error de conexión. Verifica tu internet.");
+            console.error("❌ ERROR DURANTE EL FETCH:", err?.message || err);
+            setError(err?.message || "Error de conexión. Verifica tu internet.");
         } finally {
             setIsLoading(false);
         }
@@ -300,28 +301,39 @@ export default function useParqueoDetalle(): UseParqueoDetalleReturn {
 
         // Verificar autenticación
         if (!userData) {
-            // Este caso ahora se maneja en el componente con el modal
-            console.log('🔐 Usuario no autenticado, mostrando modal...');
+            // El componente UI puede manejar el modal / login
+            console.log('🔐 Usuario no autenticado, no navega automáticamente.');
             return;
         }
 
         const paramsToPass: NavigationParams = {
-            parqueoId: data.id.toString(),
-            parqueoNombre: data.nombre || 'Parqueo',
-            tarifaAuto: processedData.tarifaAuto.toString(),
-            tarifaMoto: processedData.tarifaMoto.toString(),
-            capacidadAutos: processedData.capacidadAutos.toString(),
-            capacidadMotos: processedData.capacidadMotos.toString(),
-            disponibilidadAutos: processedData.disponibilidadAutos.toString(),
-            disponibilidadMotos: processedData.disponibilidadMotos.toString(),
-            parqueoLat: data.latitud?.toString() || '-17.3936',
-            parqueoLng: data.longitud?.toString() || '-66.1569',
-        };
+    parqueoId: data.id.toString(),
+    parqueoNombre: data.nombre || 'Parqueo',
+    tarifaAuto: processedData.tarifaAuto.toString(),
+    tarifaMoto: processedData.tarifaMoto.toString(),
+    capacidadAutos: processedData.capacidadAutos.toString(),
+    capacidadMotos: processedData.capacidadMotos.toString(),
+    disponibilidadAutos: processedData.disponibilidadAutos.toString(),
+    disponibilidadMotos: processedData.disponibilidadMotos.toString(),
+    parqueoLat: String(
+        data.latitud !== undefined && data.latitud !== null
+            ? data.latitud
+            : -17.3936
+    ),
+    parqueoLng: String(
+        data.longitud !== undefined && data.longitud !== null
+            ? data.longitud
+            : -66.1569
+    ),
+};
 
-        console.log(`🚀 Navegando a Reserva con datos:`, paramsToPass);
+
+        const safeParams = serializeNavigationParams(paramsToPass);
+
+        console.log(`🚀 Navegando a Reserva con datos (serializados):`, safeParams);
         router.push({
-            pathname: '/reserva' as any,
-            params: paramsToPass
+            pathname: '/reserva',
+            params: safeParams
         });
     }, [data, processedData, router, userData]);
 
@@ -338,9 +350,9 @@ export default function useParqueoDetalle(): UseParqueoDetalleReturn {
         processedData,
         handleNavigateToReserva,
         refetch,
-        userData,  
+        // NOTA: no devolvemos userData porque UseParqueoDetalleReturn no lo define;
+        // si quieres exponerlo, actualiza el type y lo incluimos aquí.
     };
 }
-
 
 export { formatHour };

@@ -8,11 +8,13 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
+
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 
 import { useMapa } from '../../hooks/useMapa';
 import { useBusqueda } from '../../hooks/useBusqueda';
+
 import MapLayer from '../../components/Mapa/MapLayer';
 import MapUI from '../../components/Mapa/MapUi';
 import ParkeoPopup from '../../components/Mapa/ParkeoPopup';
@@ -25,7 +27,9 @@ import {
   convertirArrayParqueoBusquedaAParaVista,
 } from '../../types/mapa';
 
-// Helpers de autocompletado
+// ------------------------
+// Helpers
+// ------------------------
 const normalizar = (texto: string) =>
   texto
     .toLowerCase()
@@ -38,18 +42,29 @@ const filtrarParqueosLocalmente = (
 ) => {
   const q = normalizar(query.trim());
   if (!q) return [];
+
   return parqueos.filter((p) => {
-    const nombre = normalizar(p.nombre || '');
-    const direccion = normalizar(p.direccion || '');
-    return nombre.includes(q) || direccion.includes(q);
-  });
+  const nombre = normalizar(p.nombre || '');
+  const direccion = normalizar(p.direccion || '');
+  return nombre.startsWith(q) || direccion.startsWith(q);
+});
+
 };
+
+// =====================================================
+//                COMPONENTE PRINCIPAL MAPA
+// =====================================================
 
 const Mapa: React.FC = () => {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    destLat?: string;
+    destLng?: string;
+    destNombre?: string;
+  }>();
 
+  // Hook principal de mapa
   const {
-    // useMapa
     mapRef,
     region,
     userLocation,
@@ -64,171 +79,158 @@ const Mapa: React.FC = () => {
     showDirections,
     isLocating,
     setRegion,
+    setDestination,          // <-- agregado desde useMapa
     handleCenterOnUser,
     handleZoom,
     handleMarkerPress,
     handleClearSelection,
     cerrarSoloPopup,
     handleShowDirectionsFromPopup,
-    fetchRoute,  // Necesario para calcular la ruta
+    fetchRoute,              // <-- expuesto explícitamente
   } = useMapa();
 
   // Hook de búsqueda
   const {
-    resultados: parqueosBusqueda,
-    loading: loadingBusqueda,
-    buscar,
-  } = useBusqueda();
+  resultados: parqueosBusqueda,
+  loading: loadingBusqueda,
+  buscarPorTexto,
+  buscarConFiltros,
+} = useBusqueda();
 
-  // Estado de vista
+
+  // Estado interno
   const [modoBusqueda, setModoBusqueda] = useState<'texto' | 'mapa'>('mapa');
   const [parqueosParaVista, setParqueosParaVista] = useState<ParqueoParaVista[]>([]);
-
-  // Sugerencias
   const [sugerencias, setSugerencias] = useState<ParqueoParaVista[]>([]);
-
-  // Filtros modal
   const [showFiltros, setShowFiltros] = useState(false);
-  const [filtrosActuales, setFiltrosActuales] = useState<any>({});
+  const [filtrosActuales, setFiltrosActuales] = useState<Record<string, any>>({});
 
-  // Cambiar lista según modo
+  // ------------------------------------------
+  // Cambia lista al alternar entre búsqueda y mapa
+  // ------------------------------------------
   useEffect(() => {
     if (modoBusqueda === 'mapa') {
       setParqueosParaVista(parqueosUseMapa || []);
     } else {
-      const convertidos =
-        convertirArrayParqueoBusquedaAParaVista(parqueosBusqueda);
+      const convertidos = convertirArrayParqueoBusquedaAParaVista(parqueosBusqueda);
       setParqueosParaVista(convertidos);
     }
   }, [parqueosUseMapa, parqueosBusqueda, modoBusqueda]);
 
-  // Efecto para manejar el destino y calcular la ruta cuando los params de la URL cambian
+  // ------------------------------------------
+  // Manejo del destino desde URL (parámetros)
+  // ------------------------------------------
   useEffect(() => {
-    const hasDest = router.query?.destLat || router.query?.destLng;
-    if (!hasDest) return;
+    const latStr = params.destLat;
+    const lngStr = params.destLng;
 
-    const destLat = router.query?.destLat ? Number(router.query?.destLat) : null;
-    const destLng = router.query?.destLng ? Number(router.query?.destLng) : null;
-    const destName = router.query?.destNombre ?? null;
+    if (!latStr || !lngStr) return;
 
-    if (!destLat || !destLng) {
-      console.warn('Params de destino inválidos:', router.query);
+    const lat = Number(latStr);
+    const lng = Number(lngStr);
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      console.warn('Coordenadas inválidas en params:', params);
       return;
     }
 
-    const destCoords = { latitude: destLat, longitude: destLng };
+    const destCoords = { latitude: lat, longitude: lng };
     setDestination(destCoords);
+
     setRegion({
-      latitude: destLat,
-      longitude: destLng,
+      latitude: lat,
+      longitude: lng,
       latitudeDelta: 0.05,
       longitudeDelta: 0.05,
     });
 
     if (userLocation) {
-      fetchRoute(userLocation, destCoords, destName ?? undefined);
+      fetchRoute(userLocation, destCoords, params.destNombre);
     }
 
-    // Limpiar params después de procesar
-    router.setParams({ destLat: undefined, destLng: undefined, destNombre: undefined });
+    router.setParams({
+      destLat: undefined,
+      destLng: undefined,
+      destNombre: undefined,
+    });
 
-  }, [router.query?.destLat, router.query?.destLng, userLocation, fetchRoute]);
+  }, [params.destLat, params.destLng, params.destNombre, userLocation, fetchRoute]);
 
-  // Control principal de búsqueda
-  const handleBuscar = async (payload: string | any) => {
-    try {
-      if (typeof payload === 'string') {
-        const q = payload.trim();
-        if (!q || q.length < 3) {
-          Alert.alert('Búsqueda', 'Escribe al menos 3 caracteres.');
-          return;
-        }
-        await buscar({ q });
-      } else {
-        const opciones = { ...payload };
-
-        // añadir lat/lng si no vienen
-        if (!opciones.lat && region) {
-          opciones.lat = region.latitude;
-          opciones.lng = region.longitude;
-        }
-
-        // validaciones
-        if (opciones.q && opciones.q.length > 0 && opciones.q.length < 3) {
-          Alert.alert('Búsqueda', 'Escribe 3+ caracteres.');
-          return;
-        }
-
-        await buscar(opciones);
+  // ------------------------------------------
+  // Acción principal de búsqueda
+  // ------------------------------------------
+  const handleBuscar = async (payload: string | Record<string, any>) => {
+  try {
+    if (typeof payload === 'string') {
+      const q = payload.trim();
+      if (!q || q.length < 1) {
+        setModoBusqueda('mapa');
+        return;
       }
 
-      setModoBusqueda('texto');
-      setSugerencias([]);
+      await buscarPorTexto(q);
+    } else {
+      const opciones = { ...payload };
 
-      // centrar en primer resultado
-      const convertidos =
-        convertirArrayParqueoBusquedaAParaVista(parqueosBusqueda);
-      if (convertidos.length > 0 && mapRef.current) {
-        const first = convertidos[0];
-        mapRef.current.animateToRegion(
-          {
-            latitude: first.latitud,
-            longitude: first.longitud,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          },
-          1000
-        );
+      if (!opciones.lat && region) {
+        opciones.lat = region.latitude;
+        opciones.lng = region.longitude;
       }
 
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Error', 'Ocurrió un error en la búsqueda.');
+      await buscarConFiltros(opciones);
     }
-  };
 
-  // autocompletado
-  const handleChangeTexto = (texto: string) => {
-    const limpia = texto.trim();
+    setModoBusqueda('texto');
+    setSugerencias([]);
 
-    if (!limpia) {
+  } catch (err) {
+    console.error(err);
+    Alert.alert('Error', 'Ocurrió un error en la búsqueda.');
+  }
+};
+
+
+  // ------------------------------------------
+  // Autocompletado
+  // ------------------------------------------
+  const handleChangeTexto = (txt: string) => {
+    const clean = txt.trim();
+    if (!clean) {
       setSugerencias([]);
       return;
     }
-
-    const matches = filtrarParqueosLocalmente(parqueosUseMapa || [], limpia);
+    const matches = filtrarParqueosLocalmente(parqueosUseMapa, clean);
     setSugerencias(matches.slice(0, 35));
   };
 
-  const handleSeleccionSugerencia = async (parqueo: ParqueoParaVista) => {
+  const handleSeleccionSugerencia = async (p: ParqueoParaVista) => {
     if (mapRef.current) {
       mapRef.current.animateToRegion(
         {
-          latitude: parqueo.latitud,
-          longitude: parqueo.longitud,
+          latitude: p.latitud,
+          longitude: p.longitud,
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         },
         1000
       );
     }
-
     setSugerencias([]);
-    await buscar({ q: parqueo.nombre });
+    await buscarPorTexto(p.nombre);
+
     setModoBusqueda('texto');
   };
 
   const handleVolverAMapaCompleto = () => {
     setModoBusqueda('mapa');
     setSugerencias([]);
-
     if (mapRef.current) {
       mapRef.current.animateToRegion(COCHABAMBA_REGION, 1000);
     }
   };
 
-  const handleParqueoPress = (parqueo: ParqueoParaVista) => {
-    router.push(`/parqueo-detalle/${parqueo.id}`);
+  const handleParqueoPress = (p: ParqueoParaVista) => {
+    router.push(`/parqueo-detalle/${p.id}`);
   };
 
   const getTituloResultados = () =>
@@ -236,22 +238,9 @@ const Mapa: React.FC = () => {
       ? `${parqueosParaVista.length} resultados`
       : `${parqueosParaVista.length} parqueos disponibles`;
 
-  const getInfoAdicionalParqueo = (parqueo: ParqueoParaVista) => {
-    if (modoBusqueda !== 'mapa') {
-      const p = parqueosBusqueda.find((x) => x.id === parqueo.id);
-      if (!p) return null;
-      return {
-        precio: p.precio_minimo_hora,
-        plazasDisponibles: p.plazas_disponibles,
-        distancia: p.distancia_metros,
-        ratingPromedio: p.rating_promedio,
-        totalCalificaciones: p.total_calificaciones,
-      };
-    }
-    return null;
-  };
-
-  // Error ubicación
+  // ------------------------------------------
+  // Manejo errores ubicación
+  // ------------------------------------------
   if (errorMsg) {
     return (
       <View className="flex-1 items-center justify-center bg-red-50 p-4">
@@ -262,19 +251,19 @@ const Mapa: React.FC = () => {
         <Text className="text-base text-red-600 text-center mb-4">
           {errorMsg}
         </Text>
-        <View className="flex-row space-x-3">
-          <TouchableOpacity
-            onPress={handleCenterOnUser}
-            className="bg-red-600 px-4 py-3 rounded-lg"
-          >
-            <Text className="text-white font-semibold">Reintentar</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          onPress={handleCenterOnUser}
+          className="bg-red-600 px-4 py-3 rounded-lg"
+        >
+          <Text className="text-white font-semibold">Reintentar</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
+  // ------------------------------------------
   // Loading general
+  // ------------------------------------------
   if (!region || isLoadingApi || isLocationLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-gray-100">
@@ -288,8 +277,13 @@ const Mapa: React.FC = () => {
     );
   }
 
+  // =====================================================
+  //                     RENDER PRINCIPAL
+  // =====================================================
+
   return (
     <View className="flex-1">
+
       {/* BUSCADOR */}
       <BuscadorMapa
         onBuscar={handleBuscar}
@@ -298,7 +292,7 @@ const Mapa: React.FC = () => {
         onAbrirFiltros={() => setShowFiltros(true)}
       />
 
-      {/* LISTA DE SUGERENCIAS */}
+      {/* AUTOCOMPLETE */}
       {sugerencias.length > 0 && (
         <View className="absolute top-24 left-8 right-8 bg-white rounded-xl shadow-lg z-10 max-h-56 border border-gray-200">
           <ScrollView keyboardShouldPersistTaps="handled">
@@ -330,11 +324,11 @@ const Mapa: React.FC = () => {
         parqueos={parqueosParaVista}
         onMarkerPress={handleMarkerPress}
         destination={destination}
-        routeCoordinates={routeCoordinates || []}
+        routeCoordinates={routeCoordinates}
         showDirections={showDirections}
       />
 
-      {/* UI */}
+      {/* BOTONES DEL MAPA */}
       <MapUI
         onCenterOnUser={handleCenterOnUser}
         onZoom={handleZoom}
@@ -344,18 +338,20 @@ const Mapa: React.FC = () => {
         isLoadingRoute={isLoadingRoute}
       />
 
-      {/* LISTADO RESULTADOS (MODO TEXTO) */}
+      {/* RESULTADOS EN MODO TEXTO */}
       {modoBusqueda === 'texto' && (
         <View className="absolute bottom-4 left-4 right-4">
           <View className="bg-white rounded-xl p-4 shadow-lg border border-gray-200">
             <View className="flex-row justify-between items-center mb-2">
-              <Text className="text-lg font-bold text-black">{getTituloResultados()}</Text>
+              <Text className="text-lg font-bold text-black">
+                {getTituloResultados()}
+              </Text>
 
               <TouchableOpacity
                 onPress={handleVolverAMapaCompleto}
                 className="bg-[#7BB5CB] px-3 py-1 rounded-lg"
               >
-                <Text className="text-white text-sm font-semibold">Ver todos</Text>
+                <Text className="text-white text-sm font-semibold">Cancelar</Text>
               </TouchableOpacity>
             </View>
 
@@ -375,35 +371,23 @@ const Mapa: React.FC = () => {
             {!loadingBusqueda && parqueosParaVista.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2">
                 <View className="flex-row gap-2">
-                  {parqueosParaVista.slice(0, 5).map((parqueo) => {
-                    const info = getInfoAdicionalParqueo(parqueo);
-
-                    return (
-                      <TouchableOpacity
-                        key={parqueo.id}
-                        className="bg-[#7BB5CB] px-3 py-2 rounded-lg min-w-[140px]"
-                        onPress={() => handleParqueoPress(parqueo)}
-                      >
-                        <Text className="text-white font-semibold text-sm" numberOfLines={1}>
-                          {parqueo.nombre}
-                        </Text>
-                        <Text className="text-white text-xs">
-                          {info?.precio ? `${info.precio} Bs/h` : 'Consultar precio'}
-                        </Text>
-                        <Text className="text-white text-xs">
-                          ⭐ {(info?.ratingPromedio ?? parqueo.rating).toFixed(1)} •{' '}
-                          {info?.plazasDisponibles !== undefined
-                            ? `${info.plazasDisponibles} plazas`
-                            : parqueo.disponible
-                            ? 'Disponible'
-                            : 'No disponible'}
-                        </Text>
-                        {info?.distancia && (
-                          <Text className="text-white text-xs">📍 {info.distancia}m</Text>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+                  {parqueosParaVista.slice(0, 5).map((p) => (
+                    <TouchableOpacity
+                      key={p.id}
+                      className="bg-[#7BB5CB] px-3 py-2 rounded-lg min-w-[140px]"
+                      onPress={() => handleParqueoPress(p)}
+                    >
+                      <Text className="text-white font-semibold text-sm" numberOfLines={1}>
+                        {p.nombre}
+                      </Text>
+                      <Text className="text-white text-xs">
+                        ⭐ {p.rating.toFixed(1)}
+                      </Text>
+                      <Text className="text-white text-xs">
+                        {p.disponible ? 'Disponible' : 'No disponible'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </ScrollView>
             )}
@@ -416,40 +400,48 @@ const Mapa: React.FC = () => {
         <ParkeoPopup
           details={selectedParking}
           onClose={cerrarSoloPopup}
-          onShowDirections={() => {
-            if (selectedParking.latitud && selectedParking.longitud) {
-              handleShowDirectionsFromPopup({
-                latitude: selectedParking.latitud,
-                longitude: selectedParking.longitud,
-                name: selectedParking.nombre,
-              });
-            }
-          }}
+          onShowDirections={() =>
+            handleShowDirectionsFromPopup({
+              latitude: selectedParking.latitud,
+              longitude: selectedParking.longitud,
+              name: selectedParking.nombre,
+            })
+          }
           showingDirections={showDirections || isLoadingRoute}
         />
       )}
 
-      {/* FILTROS MODAL */}
-      <FiltrosModal
-        visible={showFiltros}
-        onClose={() => setShowFiltros(false)}
-        initial={filtrosActuales}
-        serviciosDisponibles={[
-          { id: 1, nombre: 'Lavado de autos' },
-          { id: 2, nombre: 'Inflado de llantas' },
-        ]}
-        onApply={async (opciones) => {
-          setFiltrosActuales(opciones);
-          setShowFiltros(false);
+      {/* FILTROS */}
+     <FiltrosModal
+  visible={showFiltros}
+  onClose={() => setShowFiltros(false)}
+  initial={filtrosActuales}
+  serviciosDisponibles={[
+    { id: 1, nombre: 'Lavado de autos' },
+    { id: 2, nombre: 'Inflado de llantas' },
+  ]}
+  onApply={async (opciones: Record<string, any>) => {
+    setFiltrosActuales(opciones);
+    setShowFiltros(false);
 
-          if (!opciones.lat && region) {
-            opciones.lat = region.latitude;
-            opciones.lng = region.longitude;
-          }
+    // 🔥 SOLO si se ordena por distancia
+    if (opciones.sort === 'distancia') {
+      if (!region) {
+        Alert.alert(
+          'Ubicación no disponible',
+          'No se puede ordenar por distancia sin ubicación actual.'
+        );
+        return;
+      }
 
-          await handleBuscar(opciones);
-        }}
-      />
+      opciones.lat = region.latitude;
+      opciones.lng = region.longitude;
+    }
+
+    await handleBuscar(opciones);
+  }}
+/>
+
     </View>
   );
 };

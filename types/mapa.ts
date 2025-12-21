@@ -1,3 +1,6 @@
+import type { Region } from "react-native-maps";
+
+// Coordenadas
 export type Coords = {
   latitude: number;
   longitude: number;
@@ -18,13 +21,14 @@ export type ParqueoParaVista = {
   plazas: any[];
   tarifas: any[];
   fotos: any[];
-  // ❌ ELIMINADO: descripcion?: string;
   rating: number;
   disponible: boolean;
+  isResumen?: boolean;
+
 };
 
 export type MapState = {
-  region: Region | null;
+  region: Region | null;        // ✔️ ahora funciona
   userLocation: Coords | null;
   errorMsg: string | null;
   selectedParking: ParqueoParaVista | null;
@@ -40,7 +44,7 @@ export type MapState = {
 };
 
 export type MapActions = {
-  setRegion: (region: Region) => void;
+  setRegion: (region: Region) => void;  // ✔️ ahora funciona
   setSelectedParking: (parking: ParqueoParaVista | null) => void;
   handleCenterOnUser: () => Promise<void>;
   handleZoom: (factor: number) => void;
@@ -49,7 +53,7 @@ export type MapActions = {
   handleShowDirectionsFromPopup: (coords: { latitude: number; longitude: number; name: string }) => void;
 };
 
-// Funciones de conversión para integrar con la búsqueda
+// Funciones de conversión
 export const convertirParqueoBusquedaAParaVista = (parqueoBusqueda: any): ParqueoParaVista => {
   return {
     id: parqueoBusqueda.id,

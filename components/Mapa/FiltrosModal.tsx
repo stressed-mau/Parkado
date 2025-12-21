@@ -26,6 +26,8 @@ const FiltrosModal: React.FC<any> = ({ visible, onClose, onApply, initial = {} }
   const [ratingMinimo, setRatingMinimo] = useState<string>(String(initial.ratingMinimo ?? ""));
   const [sort, setSort] = useState<string>((initial.sort ?? "").toString());
 
+
+  
   useEffect(() => {
     if (visible) {
       // re-inicializar con valores iniciales limpios
@@ -126,7 +128,7 @@ const FiltrosModal: React.FC<any> = ({ visible, onClose, onApply, initial = {} }
               <TouchableOpacity onPress={() => setSort("rating")} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: sort === "rating" ? "#7BB5CB" : "#ddd", marginRight: 8 }}>
                 <Text>Rating</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setSort("precio")} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: sort === "precio" ? "#7BB5CB" : "#ddd" }}>
+              <TouchableOpacity onPress={() => setSort("precio")} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: sort === "precio" ? "#7BB5CB" : "#ddd", marginRight: 8 }}>
                 <Text>Precio</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setSort("distancia")} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: sort === "distancia" ? "#7BB5CB" : "#ddd" }}>

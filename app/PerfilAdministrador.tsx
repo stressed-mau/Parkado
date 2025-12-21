@@ -1,3 +1,4 @@
+// screens/PerfilAdministrador.tsx
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
@@ -10,6 +11,7 @@ import {
   View,
   Alert,
   StyleSheet,
+  ImageSourcePropType,
 } from "react-native";
 import Logo from "../assets/Logo";
 import ParqueoPorPropietario from "../app/ParqueoPorPropietario";
@@ -25,6 +27,7 @@ export default function PerfilAdministrador() {
 
   const [userId, setUserId] = useState<number | null>(null);
   const [token, setToken] = useState<string | null>(null);
+const [mostrarHistorial, setMostrarHistorial] = useState(false);
 
   const [showParqueosOwnerView, setShowParqueosOwnerView] = useState(false);
 
@@ -137,6 +140,11 @@ export default function PerfilAdministrador() {
         return;
       }
 
+      if (!plazaId) {
+        Alert.alert("Error", "No se encontró la plaza asociada. Imposible cancelar.");
+        return;
+      }
+
       setLoading(true);
 
       await axios.delete(`${BACKEND_BASE}/api/reservas/${reservaId}`, {
@@ -186,11 +194,109 @@ export default function PerfilAdministrador() {
     );
   }
 
+  // filtramos reservas que NO tengan parqueo con nombre válido
+const ahora = new Date();
+
+// 1️⃣ Filtramos reservas válidas (con parqueo)
+const reservasFiltradas = reservas.filter((r) => {
+  const parqueo = r?.plaza?.parqueo || r?.parqueo || null;
+  if (!parqueo) return false;
+  const nombre = parqueo?.nombre;
+  if (!nombre || nombre.trim().length === 0) return false;
+  return true;
+});
+
+// 2️⃣ Reservas ACTIVAS
+const reservasActivas = reservasFiltradas.filter((r) => {
+  if (!r?.fechaHoraFin) return true;
+  return new Date(r.fechaHoraFin).getTime() >= ahora.getTime();
+});
+
+// 3️⃣ Historial
+const reservasHistorial = reservasFiltradas.filter((r) => {
+  if (!r?.fechaHoraFin) return false;
+  return new Date(r.fechaHoraFin).getTime() < ahora.getTime();
+});
+
+const renderReserva = (r: any) => {
+  const parqueo = r?.plaza?.parqueo || r?.parqueo || null;
+  if (!parqueo) return null;
+
+  const ahora = new Date();
+  const fechaFinReserva = r?.fechaHoraFin
+    ? new Date(r.fechaHoraFin)
+    : null;
+
+  const reservaExpirada =
+    fechaFinReserva !== null &&
+    fechaFinReserva.getTime() < ahora.getTime();
+
+  const imagen = resolveImageUrl(
+    parqueo?.fotos || parqueo?.foto,
+    BACKEND_BASE,
+    placeholderRemote
+  );
+
+  return (
+    <View key={r.id} style={styles.card}>
+      <View style={styles.cardRow}>
+        <ImageFallback
+          uri={imagen}
+          placeholderRemote={placeholderRemote}
+        />
+
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTitle}>
+            {parqueo.nombre}
+          </Text>
+
+          <Text style={styles.cardSubtitle}>
+            {parqueo.direccion || "Dirección no disponible"}
+          </Text>
+
+          <Text style={styles.cardSmall}>
+            <Text style={{ fontWeight: "700" }}>Plaza:</Text>{" "}
+            {r?.plaza?.nroPlaza || "N/A"}
+          </Text>
+
+          <Text style={styles.cardSmall}>
+            <Text style={{ fontWeight: "700" }}>Desde:</Text>{" "}
+            {formatDate(r.fechaHoraIni)}
+          </Text>
+
+          <Text style={styles.cardSmall}>
+            <Text style={{ fontWeight: "700" }}>Hasta:</Text>{" "}
+            {formatDate(r.fechaHoraFin)}
+          </Text>
+
+          {/* 🔥 BOTÓN CANCELAR SOLO SI NO ESTÁ EXPIRADA */}
+          {!reservaExpirada && (
+            <TouchableOpacity
+              onPress={() =>
+                cancelarReserva(r.id, r?.plaza?.id)
+              }
+              style={styles.cancelButton}
+            >
+              <Text style={styles.cancelText}>
+                Cancelar Reserva
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+};
+
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: colores.crema }]}>
       <View style={styles.header}>
-        <Logo width={64} height={64} />
-      </View>
+  <View style={styles.logoContainer}>
+    <Logo />
+  </View>
+</View>
+
 
       <View style={styles.infoBlock}>
         <Text style={styles.label}>Nombre</Text>
@@ -227,85 +333,61 @@ export default function PerfilAdministrador() {
         </TouchableOpacity>
       )}
 
-<View style={{ paddingHorizontal: 18, marginTop: 4, marginBottom: 8 }}>
+      
+
+      {/* Lista de reservas (usamos reservasFiltradas) */}
+      <View style={styles.listContainer}>
+        <View style={{ paddingHorizontal: 18, marginTop: 8 }}>
   <Text style={{ fontSize: 18, fontWeight: "800", color: "#111827" }}>
-    Historial de parqueos visitados
+    Reservas activas
   </Text>
 </View>
 
+<View style={styles.listContainer}>
+  {reservasActivas.length === 0 ? (
+    <View style={styles.card}>
+      <Text style={{ color: "#666" }}>
+        No tienes reservas activas.
+      </Text>
+    </View>
+  ) : (
+    reservasActivas.map((r) => renderReserva(r))
+  )}
+</View>
 
-      {/* Lista de reservas */}
-      <View style={styles.listContainer}>
-        {reservas.length === 0 ? (
-          <View style={styles.card}>
-            <Text style={{ color: "#666" }}>No hay reservas activas.</Text>
-          </View>
-        ) : (
-          reservas.map((r) => {
-            const parqueo = r?.plaza?.parqueo || r?.parqueo || null;
+<View style={{ paddingHorizontal: 18, marginTop: 12 }}>
+  <TouchableOpacity
+    onPress={() => setMostrarHistorial(!mostrarHistorial)}
+    style={{
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 10,
+    }}
+  >
+    <Text style={{ fontSize: 18, fontWeight: "800", color: "#111827" }}>
+      Historial de reservas
+    </Text>
+    <Text style={{ fontSize: 18 }}>
+      {mostrarHistorial ? "▲" : "▼"}
+    </Text>
+  </TouchableOpacity>
+</View>
 
-            const rawImagen =
-              parqueo?.fotos ||
-              parqueo?.foto ||
-              parqueo?.imagen ||
-              parqueo?.imagenUrl ||
-              null;
+{mostrarHistorial && (
+  <View style={styles.listContainer}>
+    {reservasHistorial.length === 0 ? (
+      <View style={styles.card}>
+        <Text style={{ color: "#666" }}>
+          No hay reservas anteriores.
+        </Text>
+      </View>
+    ) : (
+      reservasHistorial.map((r) => renderReserva(r))
+    )}
+  </View>
+)}
 
-            const imagen = resolveImageUrl(
-              rawImagen,
-              BACKEND_BASE,
-              placeholderRemote
-            );
-
-            const nombre = parqueo?.nombre || "Parqueo sin nombre";
-            const direccion =
-              parqueo?.direccion || "Dirección no disponible aún";
-            const nroPlaza = r?.plaza?.nroPlaza || r?.nroPlaza || "N/A";
-            const matricula =
-              r?.matriculaVehiculo || r?.vehiculo?.placa || "N/D";
-            const desde = r?.fechaHoraIni ? formatDate(r.fechaHoraIni) : "--";
-            const hasta = r?.fechaHoraFin ? formatDate(r.fechaHoraFin) : "--";
-            const key = r?.id || r?._id || Math.random().toString();
-
-            return (
-              <View key={key} style={styles.card}>
-                <View style={styles.cardRow}>
-                  <ImageFallback
-                    uri={imagen}
-                    placeholderRemote={placeholderRemote}
-                  />
-
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cardTitle}>{nombre}</Text>
-                    <Text style={styles.cardSubtitle}>{direccion}</Text>
-
-                    <Text style={styles.cardSmall}>
-                      <Text style={{ fontWeight: "700" }}>Plaza:</Text>{" "}
-                      {nroPlaza}
-                    </Text>
-                    <Text style={styles.cardSmall}>
-                      <Text style={{ fontWeight: "700" }}>Matrícula:</Text>{" "}
-                      {matricula}
-                    </Text>
-                    <Text style={styles.cardSmall}>
-                      <Text style={{ fontWeight: "700" }}>Desde:</Text> {desde}
-                    </Text>
-                    <Text style={styles.cardSmall}>
-                      <Text style={{ fontWeight: "700" }}>Hasta:</Text> {hasta}
-                    </Text>
-
-                    <TouchableOpacity
-                      onPress={() => cancelarReserva(r?.id, r?.plaza?.id)}
-                      style={styles.cancelButton}
-                    >
-                      <Text style={styles.cancelText}>Cancelar Reserva</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            );
-          })
-        )}
       </View>
     </ScrollView>
   );
@@ -402,12 +484,12 @@ function ImageFallback({ uri, placeholderRemote }: any) {
   const normalize = (u: any) => {
     if (!u) return null;
     if (Array.isArray(u)) return u.find(Boolean) || null;
-    if (typeof u === "object") return u.url || u.uri || null;
+    if (typeof u === "object") return u.url || u.uri || u.path || u.filename || null;
     return String(u);
   };
 
   const initial = normalize(uri) || placeholderRemote || null;
-  const [src, setSrc] = React.useState<any>(initial);
+  const [src, setSrc] = React.useState<string | number | null>(initial);
   const [loading, setLoading] = React.useState<boolean>(Boolean(initial));
 
   React.useEffect(() => {
@@ -416,13 +498,16 @@ function ImageFallback({ uri, placeholderRemote }: any) {
     setSrc(next);
   }, [uri, placeholderRemote]);
 
-  const buildSource = (u: any) => {
-    if (!u) return null;
-    if (typeof u === "number") return u;
+  const buildSource = (u: string | number | null): ImageSourcePropType => {
+    // Siempre devolvemos algo válido (number para local assets o {uri: string})
+    if (!u) {
+      return { uri: placeholderRemote };
+    }
+    if (typeof u === "number") return u as any;
     return { uri: String(u) };
   };
 
-  const isLocalAsset = typeof src === "number";
+  const imgSource = buildSource(src);
 
   return (
     <View
@@ -451,9 +536,9 @@ function ImageFallback({ uri, placeholderRemote }: any) {
         </View>
       )}
 
-      {src ? (
+      {imgSource ? (
         <Image
-          source={isLocalAsset ? src : buildSource(src)}
+          source={imgSource}
           style={{ width: 64, height: 64 }}
           resizeMode="cover"
           onLoad={() => setLoading(false)}
@@ -480,7 +565,18 @@ function ImageFallback({ uri, placeholderRemote }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { padding: 18 },
+  header: {
+  padding: 16,
+  alignItems: "center",
+  justifyContent: "center",
+},
+logoContainer: {
+  width: 64,
+  height: 120,
+  alignItems: "center",
+  justifyContent: "center",
+},
+
   infoBlock: { paddingHorizontal: 18, paddingBottom: 8 },
   label: { color: "#6B7280", fontSize: 14, marginBottom: 6 },
   name: {

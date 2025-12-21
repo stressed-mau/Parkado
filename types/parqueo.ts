@@ -8,6 +8,19 @@ export interface PlazaAPI {
     tipoVehiculoId: number;
 }
 
+export interface ReservaAPI {
+    id: number;
+    fechaHoraIni: string;
+    fechaHoraFin: string;
+    matriculaVehiculo: string;
+    plazaId: number;
+    parqueoId: number;
+    usuarioId: number;
+    tipoVehiculoId: number;
+    plaza?: PlazaAPI; // opcional, a veces viene embebida
+}
+
+
 export interface CapacidadAPI {
     id: number;
     cantidad: number;
@@ -47,6 +60,7 @@ export interface ParqueoDetalleAPI {
     tarifas: TarifaAPI[];
     fotos: any[];
     // ❌ ELIMINAR: descripcion?: string;
+     reservas: ReservaAPI[];
     serviciosAsociados?: number[]; // ✅ AGREGAR
 }
 

@@ -1,3 +1,4 @@
+// ParqueoPorPropietario.tsx
 import axios from "axios";
 import React, { useEffect, useState } from "react";
 import {
@@ -9,6 +10,7 @@ import {
   View,
   StyleSheet,
   Alert,
+  ImageSourcePropType,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -47,6 +49,7 @@ export default function ParqueoPorPropietario({
 
   const [showDashboard, setShowDashboard] = useState(false);
   const [selectedParqueoId, setSelectedParqueoId] = useState<number | null>(null);
+  const [selectedParqueoNombre, setSelectedParqueoNombre] = useState<string | null>(null);
   const [showParqueoDetalle, setShowParqueoDetalle] = useState(false);
   const [showEditarParqueo, setShowEditarParqueo] = useState(false);
   const [showRegistrarParqueo, setShowRegistrarParqueo] = useState(false);
@@ -105,27 +108,53 @@ export default function ParqueoPorPropietario({
     }
   };
 
+const confirmarEliminarParqueo = (parqueoId: number) => {
+  Alert.alert(
+    "Eliminar parqueo",
+    "¿Estás seguro de que deseas eliminar este parqueo?\nEsta acción no se puede deshacer.",
+    [
+      {
+        text: "Cancelar",
+        style: "cancel",
+      },
+      {
+        text: "Eliminar",
+        style: "destructive",
+        onPress: () => eliminarParqueo(parqueoId),
+      },
+    ],
+    { cancelable: true }
+  );
+};
+
+
   if (showDashboard && selectedParqueoId !== null) {
     return (
       <DashboardParqueo
-        parqueoId={selectedParqueoId}
-        onClose={() => {
-          setShowDashboard(false);
-          setSelectedParqueoId(null);
-        }}
-      />
+  parqueoId={selectedParqueoId}
+  parqueoNombre={selectedParqueoNombre}
+  onClose={() => {
+    setShowDashboard(false);
+    setSelectedParqueoId(null);
+    setSelectedParqueoNombre(null);
+  }}
+/>
+
     );
   }
 
   if (showParqueoDetalle && selectedParqueoId !== null) {
     return (
       <AdminParqueo
-        parqueoId={selectedParqueoId}
-        onClose={() => {
-          setShowParqueoDetalle(false);
-          setSelectedParqueoId(null);
-        }}
-      />
+  parqueoId={selectedParqueoId}
+  parqueoNombre={selectedParqueoNombre}
+  onClose={() => {
+    setShowParqueoDetalle(false);
+    setSelectedParqueoId(null);
+    setSelectedParqueoNombre(null);
+  }}
+/>
+
     );
   }
 
@@ -168,13 +197,34 @@ export default function ParqueoPorPropietario({
     >
       {/* HEADER NUEVO */}
       <View style={styles.headerContainer}>
-        {onClose ? (
-          <TouchableOpacity onPress={onClose} style={styles.headerBackBtn}>
-            <MaterialCommunityIcons name="arrow-left" size={26} color="#111" />
-          </TouchableOpacity>
-        ) : null}
+        {/* 🔙 BOTÓN VOLVER (si viene onClose) */}
+{onClose && (
+  <TouchableOpacity
+    onPress={onClose}
+    style={{
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      marginBottom: 20,
+    }}
+  >
+    <MaterialCommunityIcons
+      name="arrow-left-circle"
+      size={26}
+      color="#1f2937"
+      style={{ marginRight: 6 }}
+    />
+    <Text style={{ fontWeight: "700", fontSize: 16 }}>
+      Volver
+    </Text>
+  </TouchableOpacity>
+)}
 
-        <Logo width={72} height={72} />
+
+        {/* Envolver Logo en View para controlar tamaño */}
+        <View style={{ width: 72, height: 72 }}>
+          <Logo />
+        </View>
 
         <Text style={styles.headerTitle}>Panel Administrador</Text>
         <Text style={styles.headerSubtitle}>Tus parqueos</Text>
@@ -205,47 +255,78 @@ export default function ParqueoPorPropietario({
 
                   <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
                     <TouchableOpacity
-                      onPress={() => {
-                        setSelectedParqueoId(p?.id ?? null);
-                        setShowEditarParqueo(true);
-                      }}
-                      style={styles.iconBtnBlue}
-                    >
-                      <MaterialCommunityIcons name="pencil" size={20} color={colores.azul} />
-                    </TouchableOpacity>
+  onPress={() => {
+    console.log("EDITAR PARQUEO:", p?.id, p?.nombre);
+
+    setSelectedParqueoId(p?.id ?? null);
+    setSelectedParqueoNombre(
+      typeof p?.nombre === "string" && p.nombre.trim()
+        ? p.nombre
+        : "Parqueo"
+    );
+
+    // 🔥 APAGA OTRAS VISTAS
+    setShowDashboard(false);
+    setShowParqueoDetalle(false);
+
+    // ✅ ACTIVA EDITAR
+    setShowEditarParqueo(true);
+  }}
+  style={styles.iconBtnBlue}
+>
+  <MaterialCommunityIcons name="pencil" size={20} color={colores.azul} />
+</TouchableOpacity>
+
 
                     <TouchableOpacity
-                      onPress={() => {
-                        setSelectedParqueoId(p?.id ?? null);
-                        setShowDashboard(true);
-                      }}
+  onPress={() => {
+    console.log("CLICK PARQUEO:", p?.id, p?.nombre);
+
+    setSelectedParqueoId(p?.id ?? null);
+    setSelectedParqueoNombre(
+      typeof p?.nombre === "string" && p.nombre.trim()
+        ? p.nombre
+        : "Parqueo"
+    );
+    setShowDashboard(true);
+  }}
+
                       style={[styles.iconBtn, { borderColor: colores.azul, marginLeft: 8 }]}
                     >
                       <MaterialCommunityIcons name="chart-bar" size={20} color={colores.azul} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      onPress={() => {
-                        setSelectedParqueoId(p?.id ?? null);
-                        setShowParqueoDetalle(true);
-                      }}
-                      style={[styles.iconBtn, { borderColor: colores.azul, marginLeft: 8 }]}
-                    >
-                      <MaterialCommunityIcons name="cog-outline" size={20} color={colores.azul} />
-                    </TouchableOpacity>
+  onPress={() => {
+    console.log("CLICK ADMIN PARQUEO:", p?.id, p?.nombre);
+
+    setSelectedParqueoId(p?.id ?? null);
+    setSelectedParqueoNombre(
+      typeof p?.nombre === "string" && p.nombre.trim()
+        ? p.nombre
+        : "Parqueo"
+    );
+    setShowParqueoDetalle(true);
+  }}
+  style={[styles.iconBtn, { borderColor: colores.azul, marginLeft: 8 }]}
+>
+  <MaterialCommunityIcons name="cog-outline" size={20} color={colores.azul} />
+</TouchableOpacity>
+
 
                     <View style={{ flex: 1 }} />
 
                     <TouchableOpacity
-                      onPress={() => eliminarParqueo(p.id)}
-                      style={[styles.iconBtn, { borderColor: colores.naranja }]}
-                    >
-                      <MaterialCommunityIcons
-                        name="trash-can-outline"
-                        size={20}
-                        color={colores.naranja}
-                      />
-                    </TouchableOpacity>
+  onPress={() => confirmarEliminarParqueo(p.id)}
+  style={[styles.iconBtn, { borderColor: colores.naranja }]}
+>
+  <MaterialCommunityIcons
+    name="trash-can-outline"
+    size={20}
+    color={colores.naranja}
+  />
+</TouchableOpacity>
+
                   </View>
                 </View>
               </View>
@@ -311,29 +392,29 @@ function ImageFallback({ uri, placeholderRemote }: any) {
   const normalize = (u: any) => {
     if (!u) return null;
     if (Array.isArray(u)) return u.find(Boolean) || null;
-    if (typeof u === "object") return u.url || u.uri || null;
+    if (typeof u === "object") return u.url || u.uri || u.path || u.filename || null;
     return String(u);
   };
 
-  const initial = normalize(uri) || placeholderRemote || null;
-  const [src, setSrc] = useState<any>(initial);
-  const [loading, setLoading] = useState(Boolean(initial));
+  // src solo string | number (NO null) — empezamos con placeholder si falta
+  const initial = normalize(uri) || placeholderRemote;
+  const [src, setSrc] = useState<string | number>(initial);
+  const [loading, setLoading] = useState<boolean>(Boolean(initial));
   const [errored, setErrored] = useState(false);
 
   useEffect(() => {
-    const next = normalize(uri) || placeholderRemote || null;
+    const next = normalize(uri) || placeholderRemote;
     setErrored(false);
     setLoading(Boolean(next));
     setSrc(next);
   }, [uri, placeholderRemote]);
 
-  const buildSource = (u: any) => {
-    if (!u) return null;
-    if (typeof u === "number") return u;
+  const buildSource = (u: string | number): ImageSourcePropType => {
+    if (typeof u === "number") return u as any;
     return { uri: String(u) };
   };
 
-  const isLocalAsset = typeof src === "number";
+  const imgSource = buildSource(src);
 
   return (
     <View
@@ -361,29 +442,30 @@ function ImageFallback({ uri, placeholderRemote }: any) {
         </View>
       )}
 
-      {src ? (
-        <Image
-          source={isLocalAsset ? src : buildSource(src)}
-          style={{ width: 80, height: 80 }}
-          resizeMode="cover"
-          onLoad={() => {
-            setLoading(false);
-            setErrored(false);
-          }}
-          onError={(e) => {
-            console.warn("[ImageFallback] onError for", src, e?.nativeEvent ?? e);
-            setLoading(false);
-            setErrored(true);
-            if (placeholderRemote && src !== placeholderRemote) {
-              setSrc(placeholderRemote);
-              setLoading(true);
-              return;
-            }
-            setSrc(null);
-          }}
-        />
-      ) : (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+      <Image
+        source={imgSource}
+        style={{ width: 80, height: 80 }}
+        resizeMode="cover"
+        onLoad={() => {
+          setLoading(false);
+          setErrored(false);
+        }}
+        onError={(e) => {
+          console.warn("[ImageFallback] onError for", src, e?.nativeEvent ?? e);
+          setLoading(false);
+          setErrored(true);
+          // si falla, intentamos con placeholder (pero src ya es placeholderRemote posiblemente)
+          if (placeholderRemote && src !== placeholderRemote) {
+            setSrc(placeholderRemote);
+            setLoading(true);
+            return;
+          }
+          // si ya es placeholder y falló, dejamos icon fallback (no image)
+          setSrc(placeholderRemote);
+        }}
+      />
+      {errored && (
+        <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}>
           <Text style={{ fontSize: 24 }}>📷</Text>
         </View>
       )}
@@ -426,7 +508,7 @@ const styles = StyleSheet.create({
   headerContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 30, // lo baja un poco de la barra de estado
+    paddingTop: 30,
     marginBottom: 18,
   },
   headerBackBtn: {

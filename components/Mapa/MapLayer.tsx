@@ -46,15 +46,26 @@ const MapLayer: React.FC<MapLayerProps> = ({
       scrollEnabled={true}
       zoomEnabled={true}
     >
-      {/* Marcadores de parqueos */}
-      {parqueos.map((parqueo) => (
-        <ParqueoMarker
-          key={parqueo.id}
-          parqueo={parqueo}
-          onPress={onMarkerPress}
-          destination={destination}
-        />
-      ))}
+      {parqueos.map((parqueo) => {
+  const latitude = Number(parqueo.latitud);  // Asegúrate de que las coordenadas sean números
+  const longitude = Number(parqueo.longitud);  // Asegúrate de que las coordenadas sean números
+
+  // Si alguna coordenada es inválida, no renderices el marcador
+  if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
+    console.warn("📍 Coordenadas inválidas:", parqueo);
+    return null;  // No renderizar este marcador
+  }
+
+  return (
+    <ParqueoMarker
+      key={parqueo.id}
+      parqueo={parqueo}
+      onPress={onMarkerPress}
+      destination={destination}
+    />
+  );
+})}
+
 
       {/* Ruta */}
       {showDirections && routeCoordinates.length > 0 && (

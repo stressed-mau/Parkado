@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Platform, A
 import { useRouter } from 'expo-router';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
-
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import useReserva from '../hooks/useReserva';
 import { METODOS_PAGO } from '../types/parqueo';
 
@@ -108,6 +108,127 @@ export default function ReservaScreen() {
         return `${horas}h ${minutos}m`;
     };
 
+    // ----- VALIDACIONES & WRAPPER para confirmar -----
+    const validarYConfirmar = () => {
+        // 1) Usuario
+        if (!userData) {
+            Alert.alert(
+                "No autenticado",
+                "Debes iniciar sesión para reservar. ¿Quieres ir a iniciar sesión?",
+                [
+                    { text: "Cancelar", style: "cancel" },
+                    { text: "Ir a login", onPress: () => router.push('/Login') }
+                ]
+            );
+            return;
+        }
+
+        // 2) tipoVehiculo
+        if (!tipoVehiculo) {
+            Alert.alert("Selecciona vehículo", "Selecciona si tu vehículo es 'Auto' o 'Moto' antes de continuar.");
+            return;
+        }
+
+        // 3) plazas disponibles para ese tipo
+        const disponiblesTipo = tipoVehiculo === 'auto' ? plazasDisponiblesPorTipo.autos : plazasDisponiblesPorTipo.motos;
+        if (typeof disponiblesTipo === 'number' && disponiblesTipo <= 0) {
+            Alert.alert("Sin disponibilidad", `No hay plazas disponibles para ${tipoVehiculo === 'auto' ? 'autos' : 'motos'} en este parqueo.`);
+            return;
+        }
+
+        // 4) plaza seleccionada
+        if (!plazaSeleccionadaId) {
+            Alert.alert("Selecciona plaza", "Selecciona una plaza disponible antes de confirmar la reserva.");
+            return;
+        }
+
+        const plazaSeleccionada = plazasReales.find(p => p.id === plazaSeleccionadaId);
+        if (!plazaSeleccionada) {
+            Alert.alert("Plaza inválida", "La plaza seleccionada no es válida. Actualiza la lista de plazas.");
+            return;
+        }
+
+        // 5) plaza tipo coincide con tipoVehiculo
+        const plazaTipo = (plazaSeleccionada.tipo || '').toString().toLowerCase();
+        if (tipoVehiculo === 'auto' && !plazaTipo.includes('auto') && plazaTipo !== 'auto') {
+            Alert.alert("Plaza incompatible", "La plaza seleccionada no es para autos. Elige una plaza para autos.");
+            return;
+        }
+        if (tipoVehiculo === 'moto' && !plazaTipo.includes('moto') && plazaTipo !== 'moto') {
+            Alert.alert("Plaza incompatible", "La plaza seleccionada no es para motos. Elige una plaza para motos.");
+            return;
+        }
+
+        // 6) matrícula
+        const mat = (matricula || '').trim();
+        if (!mat) {
+            Alert.alert("Matrícula requerida", "Ingresa la matrícula del vehículo.");
+            return;
+        }
+        if (mat.length < 3 || mat.length > 10) {
+            Alert.alert("Matrícula inválida", "La matrícula debe tener entre 3 y 10 caracteres.");
+            return;
+        }
+        // Sólo letras y números (puedes ajustar si quieres permitir guiones/espacios)
+        if (!/^[A-Z0-9]+$/i.test(mat)) {
+            Alert.alert("Matrícula inválida", "La matrícula sólo debe contener letras y números (sin espacios ni caracteres especiales).");
+            return;
+        }
+
+        // 7) Fechas
+        const ahora = new Date();
+        if (fechaInicio < ahora) {
+            Alert.alert("Fecha inválida", "La fecha y hora de inicio no puede estar en el pasado.");
+            return;
+        }
+        if (fechaFin <= fechaInicio) {
+            Alert.alert("Fecha inválida", "La fecha y hora de fin debe ser posterior a la fecha de inicio.");
+            return;
+        }
+        const minsDiff = (fechaFin.getTime() - fechaInicio.getTime()) / 60000;
+        const MIN_MINS = 15; // mínimo permitdo — ajusta si quieres
+        if (minsDiff < MIN_MINS) {
+            Alert.alert("Duración mínima", `La reserva debe ser de al menos ${MIN_MINS} minutos.`);
+            return;
+        }
+
+        // 8) costo
+        if (!costoTotal || costoTotal <= 0) {
+            Alert.alert("Costo inválido", "El costo calculado es 0. Verifica las tarifas o las fechas seleccionadas.");
+            return;
+        }
+
+        // 9) método de pago
+        if (!metodoPago) {
+            Alert.alert("Selecciona método", "Selecciona un método de pago antes de confirmar.");
+            return;
+        }
+
+        // 10) evitar doble envío
+        if (isCreatingReserva) {
+            Alert.alert("Procesando", "Tu reserva ya está en proceso. Espera a que termine.");
+            return;
+        }
+
+        // Pedido de confirmación final con resumen
+        const plazaLabel = plazaSeleccionada.nroPlazaReal || plazaSeleccionadaId;
+        Alert.alert(
+            "Confirmar reserva",
+            `Una vez realizada la reserva puede cancelarla desde el perfil de usuario\n\n¿Deseas confirmar la reserva?`,
+            [
+                { text: "Cancelar", style: "cancel" },
+                { text: "Confirmar", onPress: async () => {
+                    try {
+                        await handleConfirmarReserva();
+                    } catch (err) {
+                        console.error("Error en handleConfirmarReserva:", err);
+                        Alert.alert("Error", "Ocurrió un error al intentar crear la reserva.");
+                    }
+                } }
+            ]
+        );
+    };
+
     if (isLoading) {
         return (
             <View className="flex-1 items-center justify-center bg-[#F6EEE4]">
@@ -125,13 +246,21 @@ export default function ReservaScreen() {
             showsVerticalScrollIndicator={false}
         >
             {/* Botón Volver */}
-            <TouchableOpacity 
-                onPress={() => router.back()} 
-                className="absolute top-12 left-5 z-10 p-2 rounded-full bg-black/50"
-                activeOpacity={0.7}
-            >
-                <Feather name="arrow-left" size={24} color="white" />
-            </TouchableOpacity>
+<TouchableOpacity 
+  onPress={() => router.back()} 
+  className="absolute top-12 left-5 z-10 flex-row items-center p-2 rounded-full"
+  activeOpacity={0.7}
+  style={{ backgroundColor: "#7BB3CD" }}
+>
+  <MaterialCommunityIcons
+    name="arrow-left-circle"
+    size={22}
+    color="white"
+    style={{ marginRight: 6 }}
+  />
+  <Text className="text-white font-bold">Volver</Text>
+</TouchableOpacity>
+
             
             {/* Título */}
             <Text className="text-2xl font-bold text-center text-black mt-10 mb-1">
@@ -254,61 +383,80 @@ export default function ReservaScreen() {
             </View>
 
             {/* === SECCIÓN 2: PLAZAS DISPONIBLES === */}
-            <Text className="text-base font-semibold text-black mt-5 mb-2">
-                Plazas disponibles ({plazasDisponiblesParaTipo.length})
-            </Text>
-            <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false} 
-                className="mb-3 -mx-1 px-1"
-                contentContainerStyle={{ paddingHorizontal: 4 }}
-            >
-                <View className="flex-row py-1 gap-2">
-                    {plazasDisponiblesParaTipo.length > 0 ? (
-                        plazasDisponiblesParaTipo.map(plaza => (
-                            <TouchableOpacity 
-                                key={plaza.id} 
-                                className={`px-4 py-3 rounded-lg border-2 shadow-sm min-w-[100px] ${
-                                    plazaSeleccionadaId === plaza.id 
-                                    ? 'bg-[#7BB5CB] border-[#7BB5CB]' 
-                                    : 'bg-white border-[#7BB5CB]'
-                                }`} 
-                                onPress={() => setPlazaSeleccionadaId(plaza.id)} 
-                                activeOpacity={0.7}
-                            >
-                                <Text className={`font-bold text-base text-center ${
-                                    plazaSeleccionadaId === plaza.id ? 'text-white' : 'text-[#7BB5CB]'
-                                }`}>
-                                    {plaza.nroPlazaReal}
-                                </Text>
-                                <Text className={`text-xs text-center ${
-                                    plazaSeleccionadaId === plaza.id ? 'text-white' : 'text-gray-600'
-                                }`}>
-                                    {plaza.tipo === 'auto' ? 'Auto' : 'Moto'}
-                                </Text>
-                                <Text className={`text-xs text-center ${
-                                    plazaSeleccionadaId === plaza.id ? 'text-white' : 'text-green-600'
-                                }`}>
-                                    ● Disponible
-                                </Text>
-                            </TouchableOpacity>
-                        ))
-                    ) : (
-                        <View className="py-3 px-4 bg-yellow-50 rounded-lg border border-yellow-200 mx-2">
-                            <Text className="italic text-black text-center">
-                                No hay plazas {tipoVehiculo === 'auto' ? 'para autos' : 'para motos'} disponibles en este momento.
-                            </Text>
-                            <TouchableOpacity 
-                                onPress={cargarPlazasDisponibles}
-                                className="mt-2 bg-[#7BB5CB] py-2 px-4 rounded-lg"
-                                activeOpacity={0.7}
-                            >
-                                <Text className="text-white text-center font-semibold">Actualizar Disponibilidad</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-                </View>
-            </ScrollView>
+<Text className="text-base font-semibold text-black mt-5 mb-2">
+  Plazas disponibles ({plazasDisponiblesParaTipo.length})
+</Text>
+
+<View className="mb-4 items-center pl-4" >
+  {plazasDisponiblesParaTipo.length > 0 ? (
+    <View className="flex-row flex-wrap justify-start gap-[6px] w-[340px]">
+
+      {plazasDisponiblesParaTipo.map((plaza) => (
+        <TouchableOpacity
+          key={plaza.id}
+          onPress={() => setPlazaSeleccionadaId(plaza.id)}
+          activeOpacity={0.85}
+          className={`w-[22%] h-[78px] rounded-lg border-2 items-center justify-center ${
+            plazaSeleccionadaId === plaza.id
+              ? 'bg-[#7BB5CB] border-[#7BB5CB]'
+              : 'bg-white border-[#7BB5CB]'
+          }`}
+        >
+          {/* NÚMERO DE PLAZA */}
+          <Text
+            className={`text-base font-bold ${
+              plazaSeleccionadaId === plaza.id
+                ? 'text-white'
+                : 'text-[#7BB5CB]'
+            }`}
+          >
+            {plaza.nroPlazaReal}
+          </Text>
+
+          {/* TIPO */}
+          <Text
+            className={`text-[11px] ${
+              plazaSeleccionadaId === plaza.id
+                ? 'text-white'
+                : 'text-gray-600'
+            }`}
+          >
+            {plaza.tipo === 'auto' ? 'Auto' : 'Moto'}
+          </Text>
+
+          {/* ESTADO */}
+          <Text
+            className={`text-[10px] font-semibold ${
+              plazaSeleccionadaId === plaza.id
+                ? 'text-white'
+                : 'text-green-600'
+            }`}
+            numberOfLines={1}
+          >
+            Disponible
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  ) : (
+    <View className="py-4 px-4 bg-yellow-50 rounded-lg border border-yellow-200">
+      <Text className="italic text-black text-center mb-2">
+        No hay plazas {tipoVehiculo === 'auto' ? 'para autos' : 'para motos'} disponibles.
+      </Text>
+
+      <TouchableOpacity
+        onPress={cargarPlazasDisponibles}
+        className="bg-[#7BB5CB] py-2 px-4 rounded-lg"
+        activeOpacity={0.7}
+      >
+        <Text className="text-white text-center font-semibold">
+          Actualizar disponibilidad
+        </Text>
+      </TouchableOpacity>
+    </View>
+  )}
+</View>
+
 
             {/* === SECCIÓN 3: MATRÍCULA === */}
             <Text className="text-base font-semibold text-black mt-5 mb-2">
@@ -440,7 +588,7 @@ export default function ReservaScreen() {
             {/* === SECCIÓN 7: RESUMEN MEJORADO === */}
             <View className="mt-6 mb-6 p-4 bg-white rounded-lg border-2 border-[#7BB5CB] shadow">
                 <Text className="text-lg font-bold mb-3 text-black text-center">
-                    Resumen de Reserva
+                    Detalle de Reserva
                 </Text>
                 <View className="space-y-3">
                     <View className="flex-row justify-between items-center">
@@ -518,9 +666,9 @@ export default function ReservaScreen() {
                 className={`py-4 rounded-lg items-center mt-3 mb-5 shadow-xl ${
                     (!plazaSeleccionadaId || !matricula.trim() || costoTotal <= 0 || isCreatingReserva || !userData) 
                     ? 'bg-gray-400' 
-                    : 'bg-[#FD721D]'
+                    : 'bg-black'
                 }`} 
-                onPress={handleConfirmarReserva} 
+                onPress={validarYConfirmar} 
                 disabled={!plazaSeleccionadaId || !matricula.trim() || costoTotal <= 0 || isCreatingReserva || !userData} 
                 activeOpacity={0.8}
             >

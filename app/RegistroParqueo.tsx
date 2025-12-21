@@ -3,6 +3,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import React, { useEffect, useState } from "react";
@@ -55,6 +56,8 @@ export default function RegistroEstacionamiento({ onClose }: RegistroEstacionami
     },
   });
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [licenciaUri, setLicenciaUri] = useState<string | null>(null);
   const [fotoUri, setFotoUri] = useState<string | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -64,6 +67,8 @@ export default function RegistroEstacionamiento({ onClose }: RegistroEstacionami
     null
   );
   const [tempTime, setTempTime] = useState<Date>(new Date());
+
+  
 
   const diasSemana = [
     { key: "lunes", label: "Lunes" },
@@ -318,97 +323,95 @@ export default function RegistroEstacionamiento({ onClose }: RegistroEstacionami
 
   // Envío formulario
   const handleSubmit = async () => {
-    try {
-      if (!validarAntesDeEnviar()) return;
+  if (isSubmitting) return; // 🚫 evita doble envío
+  setIsSubmitting(true);
 
-      const usuario = await obtenerUsuarioActual();
-      if (!usuario || !usuario.id) {
-        Alert.alert("Error", "Usuario no autenticado. Inicia sesión para registrar el parqueo.");
+  try {
+    if (!validarAntesDeEnviar()) return;
+
+    const usuario = await obtenerUsuarioActual();
+    if (!usuario || !usuario.id) {
+      Alert.alert("Error", "Usuario no autenticado. Inicia sesión para registrar el parqueo.");
+      return;
+    }
+    const propietarioIdReal = usuario.id;
+
+    const urlsFotos: string[] = [];
+    if (fotoUri) {
+      const u = await uploadToCloudinary(fotoUri);
+      if (u) urlsFotos.push(u);
+      else {
+        Alert.alert("Error", "No se pudo subir la foto de referencia.");
         return;
       }
-      const propietarioIdReal = usuario.id;
-
-      const urlsFotos: string[] = [];
-      if (fotoUri) {
-        const u = await uploadToCloudinary(fotoUri);
-        if (u) urlsFotos.push(u);
-        else {
-          Alert.alert("Error", "No se pudo subir la foto de referencia.");
-          return;
-        }
-      }
-      if (licenciaUri) {
-        const u = await uploadToCloudinary(licenciaUri);
-        if (u) urlsFotos.push(u);
-        else {
-          Alert.alert("Error", "No se pudo subir la licencia de funcionamiento.");
-          return;
-        }
-      }
-
-      const horariosParaBackend = diasSemana.map(({ key, label }) => {
-        const horario = form.horarios[key as keyof typeof form.horarios];
-        return {
-          diaSemana: label.toUpperCase(),
-          horaAbrir: horario.abierto ? horario.apertura : "00:00",
-          horaCerrar: horario.abierto ? horario.cierre : "00:00",
-          esCerrado: !horario.abierto,
-        };
-      });
-
-      const body = {
-        nombre: form.nombre.trim(),
-        direccion: (form.direccion || "").trim(),
-        tipoLugar: form.tipoLugar === "un_piso" ? "Un Piso" : "Edificio",
-        propietarioId: propietarioIdReal,
-        latitud: parseFloat(form.latitud),
-        longitud: parseFloat(form.longitud),
-        capacidades: [
-          { cantidad: parseInt(form.capacidadAutos) || 0, tipoVehiculoId: 1 },
-          { cantidad: parseInt(form.capacidadMotos) || 0, tipoVehiculoId: 2 },
-        ],
-        serviciosAsociados: serviciosSeleccionados,
-        tarifas: [
-          { descripcion: "Hora Auto", precioHora: parseFloat(form.tarifaAutos) || 0, tipoVehiculoId: 1 },
-          { descripcion: "Hora Moto", precioHora: parseFloat(form.tarifaMotos) || 0, tipoVehiculoId: 2 },
-          { descripcion: "Día Auto", precioHora: parseFloat(form.tarifaAutosDia) || 0, tipoVehiculoId: 1 },
-          { descripcion: "Día Moto", precioHora: parseFloat(form.tarifaMotosDia) || 0, tipoVehiculoId: 2 },
-        ],
-        horarios: horariosParaBackend,
-        fotos: urlsFotos.map((url) => ({ url })),
-      };
-
-      console.log("Enviando parqueo:", JSON.stringify(body, null, 2));
-
-      const response = await fetch("https://parkado-backend.vercel.app/api/parqueos/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        Alert.alert("✅ Éxito", "Parqueo registrado correctamente.");
-        setPagina(1);
-
-        try {
-          DeviceEventEmitter.emit("parqueoCreated");
-        } catch (e) {
-          console.warn("Error emitiendo evento parqueoCreated", e);
-        }
-      } else {
-        console.error("Respuesta error del servidor:", data);
-        Alert.alert("❌ Error", data.message || "No se pudo registrar el parqueo.");
-      }
-    } catch (error) {
-      console.error("Error general al enviar:", error);
-      Alert.alert(
-        "Error de conexión",
-        "Ocurrió un problema al enviar el formulario. Verifica tu conexión a internet."
-      );
     }
-  };
+    if (licenciaUri) {
+      const u = await uploadToCloudinary(licenciaUri);
+      if (u) urlsFotos.push(u);
+      else {
+        Alert.alert("Error", "No se pudo subir la licencia de funcionamiento.");
+        return;
+      }
+    }
+
+    const horariosParaBackend = diasSemana.map(({ key, label }) => {
+      const horario = form.horarios[key as keyof typeof form.horarios];
+      return {
+        diaSemana: label.toUpperCase(),
+        horaAbrir: horario.abierto ? horario.apertura : "00:00",
+        horaCerrar: horario.abierto ? horario.cierre : "00:00",
+        esCerrado: !horario.abierto,
+      };
+    });
+
+    const body = {
+      nombre: form.nombre.trim(),
+      direccion: (form.direccion || "").trim(),
+      tipoLugar: form.tipoLugar === "un_piso" ? "Un Piso" : "Edificio",
+      propietarioId: propietarioIdReal,
+      latitud: parseFloat(form.latitud),
+      longitud: parseFloat(form.longitud),
+      capacidades: [
+        { cantidad: parseInt(form.capacidadAutos) || 0, tipoVehiculoId: 1 },
+        { cantidad: parseInt(form.capacidadMotos) || 0, tipoVehiculoId: 2 },
+      ],
+      serviciosAsociados: serviciosSeleccionados,
+      tarifas: [
+        { descripcion: "Hora Auto", precioHora: parseFloat(form.tarifaAutos) || 0, tipoVehiculoId: 1 },
+        { descripcion: "Hora Moto", precioHora: parseFloat(form.tarifaMotos) || 0, tipoVehiculoId: 2 },
+        { descripcion: "Día Auto", precioHora: parseFloat(form.tarifaAutosDia) || 0, tipoVehiculoId: 1 },
+        { descripcion: "Día Moto", precioHora: parseFloat(form.tarifaMotosDia) || 0, tipoVehiculoId: 2 },
+      ],
+      horarios: horariosParaBackend,
+      fotos: urlsFotos.map((url) => ({ url })),
+    };
+
+    const response = await fetch("https://parkado-backend.vercel.app/api/parqueos/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      Alert.alert("✅ Éxito", "Parqueo registrado correctamente.");
+      DeviceEventEmitter.emit("parqueoCreated");
+      onClose?.();
+    } else {
+      Alert.alert("❌ Error", data.message || "No se pudo registrar el parqueo.");
+    }
+  } catch (error) {
+    console.error("Error general al enviar:", error);
+    Alert.alert(
+      "Error de conexión",
+      "Ocurrió un problema al enviar el formulario. Verifica tu conexión a internet."
+    );
+  } finally {
+    setIsSubmitting(false); // ✅ SIEMPRE se libera
+  }
+};
+
 
   // Página 1
   const renderPagina1 = () => (
@@ -426,15 +429,18 @@ export default function RegistroEstacionamiento({ onClose }: RegistroEstacionami
             flexDirection: "row",
             alignItems: "center",
             alignSelf: "flex-start",
-            paddingVertical: 6,
-            paddingHorizontal: 10,
-            borderRadius: 999,
-            backgroundColor: "#7BB3CD",
-            marginBottom: 10,
+            marginBottom: 20,
           }}
         >
-          <MaterialIcons name="arrow-back" size={18} color="#fff" />
-          <Text style={{ color: "#fff", marginLeft: 6, fontWeight: "600" }}>Volver</Text>
+          <MaterialCommunityIcons
+            name="arrow-left-circle"
+            size={26}
+            color="#1f2937"
+            style={{ marginRight: 6 }}
+          />
+          <Text style={{ fontWeight: "700", fontSize: 16 }}>
+            Volver
+          </Text>
         </TouchableOpacity>
       )}
 
@@ -475,7 +481,7 @@ export default function RegistroEstacionamiento({ onClose }: RegistroEstacionami
 
       {/* Tel/Capacidades/Tarifas */}
       {[
-        ["telefono", "Teléfono", "phone-pad"],
+        
         ["capacidadAutos", "Capacidad total de autos", "numeric"],
         ["capacidadMotos", "Capacidad total de motos", "numeric"],
         ["tarifaAutos", "Tarifa autos/hora (Bs)", "numeric"],
@@ -638,26 +644,7 @@ export default function RegistroEstacionamiento({ onClose }: RegistroEstacionami
   const renderPagina2 = () => (
     <View style={{ flex: 1, backgroundColor: "#F6EEE4" }}>
       {/* 🔙 BOTÓN VOLVER (si viene onClose) */}
-      {onClose && (
-        <TouchableOpacity
-          onPress={onClose}
-          style={{
-            position: "absolute",
-            top: insets.top + 10,
-            left: 16,
-            zIndex: 50,
-            flexDirection: "row",
-            alignItems: "center",
-            paddingVertical: 6,
-            paddingHorizontal: 10,
-            borderRadius: 999,
-            backgroundColor: "#7BB3CD",
-          }}
-        >
-          <MaterialIcons name="arrow-back" size={18} color="#fff" />
-          <Text style={{ color: "#fff", marginLeft: 6, fontWeight: "600" }}>Volver</Text>
-        </TouchableOpacity>
-      )}
+      
 
       <ScrollView
         className="flex-1 px-5 py-8"
@@ -760,19 +747,25 @@ export default function RegistroEstacionamiento({ onClose }: RegistroEstacionami
           <Button
             mode="outlined"
             onPress={() => setPagina(1)}
-            style={{ borderColor: "#FD721D", width: "48%" }}
-            labelStyle={{ color: "#FD721D" }}
+            style={{ borderColor: "#7BB3CD", width: "48%" }}
+            labelStyle={{ color: "#7BB3CD" }}
           >
-            ← Atrás
+            Atrás
           </Button>
 
           <Button
-            mode="contained"
-            onPress={handleSubmit}
-            style={{ backgroundColor: "#7BB3CD", width: "48%" }}
-          >
-            ✅ Enviar
-          </Button>
+  mode="contained"
+  onPress={handleSubmit}
+  disabled={isSubmitting}
+  loading={isSubmitting}
+  style={{
+    backgroundColor: isSubmitting ? "#9CA3AF" : "#7BB3CD",
+    width: "48%",
+  }}
+>
+  {isSubmitting ? "Enviando..." : "Enviar"}
+</Button>
+
         </View>
       </ScrollView>
     </View>

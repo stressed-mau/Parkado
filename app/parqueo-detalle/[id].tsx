@@ -14,6 +14,7 @@ import {
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather, FontAwesome5 } from "@expo/vector-icons";
 import ReviewsModal from "@/components/Comment/Reviews";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 /* ============================
    INTERFACES
@@ -62,6 +63,9 @@ const ALL_DAYS = ["lunes","martes","miercoles","jueves","viernes","sabado","domi
 const formatHour = (t: string) => {
   if (!t) return "N/A";
 
+  
+
+  
   // Convertir el valor ISO-8601 a un objeto Date
   const date = new Date(t);
 
@@ -158,9 +162,15 @@ export default function DetalleParqueoScreen() {
   const [error, setError] = useState<string | null>(null);
   const [modalReviews, setModalReviews] = useState(false);
   const [modalImage, setModalImage] = useState(false);
+const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   const [telefonoPropietario, setTelefonoPropietario] = useState<string | null>(null);
   const [loadingTelefono, setLoadingTelefono] = useState(false);
+const normalizeDay = (str: string) =>
+  str
+    .toLowerCase()
+    .normalize("NFD")                 // separa acentos
+    .replace(/[\u0300-\u036f]/g, ""); // elimina acentos
 
   const { average, count } = useParqueoStats(data);
   const {
@@ -168,30 +178,35 @@ export default function DetalleParqueoScreen() {
     autoCap, motoCap, autoDisp, motoDisp, servicios
   } = useParqueoData(data);
 
-  /* FETCH de detalles (usa el endpoint que tenías) */
-  useFocusEffect(useCallback(() => {
-    if (!parqueoId) { setError("ID del parqueo no encontrado en la URL."); setLoading(false); return; }
+const fetchParqueoDetalle = async () => {
+  if (!parqueoId) return;
 
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const url = `https://parkado-backend.vercel.app/api/parqueos/details`;
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Error ${response.status}: No se pudo cargar los datos.`);
-        const json: ParqueoDetalleAPI[] = await response.json();
-        const idBuscado = parseInt(parqueoId as string, 10);
-        const found = json.find(p => p.id === idBuscado);
-        if (!found) throw new Error(`No se encontró el parqueo con ID: ${idBuscado}`);
-        setData(found);
+  setLoading(true);
+  setError(null);
 
-        // 👇 Intentar obtener el id del propietario (ajusta usuarioId/propietarioId según tu API)
-        const propietarioId =
-          (found as any).usuarioId ??
-          (found as any).propietarioId ??
-          null;
+  try {
+    const url = `https://parkado-backend.vercel.app/api/parqueos/details`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}: No se pudo cargar los datos.`);
+    }
 
-        if (propietarioId) {
+    const json: ParqueoDetalleAPI[] = await response.json();
+    const idBuscado = parseInt(parqueoId as string, 10);
+    const found = json.find(p => p.id === idBuscado);
+
+    if (!found) {
+      throw new Error(`No se encontró el parqueo con ID: ${idBuscado}`);
+    }
+
+    setData(found);
+
+const propietarioId =
+  (found as any).usuarioId ??
+  (found as any).propietarioId ??
+  null;
+
+if (propietarioId) {
   try {
     console.log("🧑‍💼 ID del propietario:", propietarioId);
 
@@ -200,9 +215,9 @@ export default function DetalleParqueoScreen() {
       `https://parkado-backend.vercel.app/api/usuarios/${propietarioId}`
     );
     if (!respUser.ok) throw new Error("No se pudo obtener el teléfono del propietario");
+
     const usuario: UsuarioPerfil = await respUser.json();
 
-    console.log("📥 Usuario recibido de la API:", usuario);
     console.log("📞 Teléfono recibido de la API:", usuario.telefono);
 
     setTelefonoPropietario(usuario.telefono);
@@ -214,16 +229,22 @@ export default function DetalleParqueoScreen() {
 }
 
 
-      } catch (e: any) {
-        console.error("❌ ERROR DURANTE EL FETCH:", e);
-        setError(e.message || "Error de conexión. Verifica tu internet.");
-      } finally {
-        setLoading(false);
-      }
-    };
+  } catch (e: any) {
+    console.error("❌ ERROR FETCH PARQUEO:", e);
+    setError(e.message || "Error de conexión");
+  } finally {
+    setLoading(false);
+  }
+};
 
-    fetchData();
-  }, [parqueoId]));
+
+  /* FETCH de detalles (usa el endpoint que tenías) */
+  useFocusEffect(
+  useCallback(() => {
+    fetchParqueoDetalle();
+  }, [parqueoId])
+);
+
 
   /* Navegar a reserva */
   const handleNavigateToReserva = () => {
@@ -260,7 +281,7 @@ const handleWhatsAppPress = () => {
 };
 
 
-  /* Renders */
+/* Renders */
   if (loading) return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F6EEE4' }}>
       <ActivityIndicator size="large" color="#7BB5CB" />
@@ -271,14 +292,62 @@ const handleWhatsAppPress = () => {
   if (error || !data) return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: '#F6EEE4' }}>
       <Text style={{ color: '#FD721D', fontWeight: '700', fontSize: 18, textAlign: 'center', marginBottom: 12 }}>{error || "Datos no disponibles"}</Text>
-      <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: '#FD721D', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 }}>
-        <Text style={{ color: 'white', fontWeight: '700' }}>Volver</Text>
-      </TouchableOpacity>
+       
+      <TouchableOpacity
+  onPress={() => router.back()}
+  style={{
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "#000000ff",
+  }}
+>
+  <MaterialCommunityIcons
+    name="arrow-left"
+    size={22}
+    color="#fff"
+    style={{ marginRight: 6 }}
+  />
+  <Text style={{ fontWeight: "700", fontSize: 16, color: "#fff" }}>
+    Volver
+  </Text>
+</TouchableOpacity>
+
     </View>
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F6EEE4' }}>
+      {/* BOTÓN VOLVER (absoluto, encima de la imagen) - usa tu botón (emoji + texto) y la misma lógica */}
+      <TouchableOpacity
+  onPress={() => router.back()}
+  style={{
+    position: "absolute",
+    top: 12,
+    left: 12,
+    zIndex: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "#000000ff",
+  }}
+>
+  <MaterialCommunityIcons
+    name="arrow-left"
+    size={18}
+    color="#fff"
+    style={{ marginRight: 6 }}
+  />
+  <Text style={{ fontWeight: "700", fontSize: 14, color: "#fff" }}>
+    Volver
+  </Text>
+</TouchableOpacity>
+
+
       {/* Imagen principal clickeable */}
       <TouchableOpacity onPress={() => setModalImage(true)} activeOpacity={0.9}>
         <Image source={{ uri: img }} style={{ width: '100%', height: 256 }} resizeMode="cover" />
@@ -305,7 +374,7 @@ const handleWhatsAppPress = () => {
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
           <TouchableOpacity
             onPress={handleNavigateToReserva}
-            style={{ width: '32%', backgroundColor: '#FD721D', paddingVertical: 12, borderRadius: 10, alignItems: 'center' }}
+            style={{ width: '32%', backgroundColor: '#000000ff', paddingVertical: 12, borderRadius: 10, alignItems: 'center' }}
           >
             <Text style={{ color: 'white', fontWeight: '700' }}>RESERVAR</Text>
           </TouchableOpacity>
@@ -344,7 +413,11 @@ const handleWhatsAppPress = () => {
             <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Galería</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {imagenes.map((u, i) => (
-                <TouchableOpacity key={i} onPress={() => setModalImage(true)}>
+                <TouchableOpacity key={i} onPress={() => {
+  setSelectedImage(u);
+  setModalImage(true);
+}}
+>
                   <Image source={{ uri: u }} style={{ width: 128, height: 80, borderRadius: 8, marginRight: 8 }} resizeMode="cover" />
                 </TouchableOpacity>
               ))}
@@ -363,7 +436,7 @@ const handleWhatsAppPress = () => {
             </View>
           </View>
 
-          <View style={{ width: '48%', backgroundColor: '#FD721D', padding: 12, borderRadius: 8, flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ width: '48%', backgroundColor: '#7BB5CB', padding: 12, borderRadius: 8, flexDirection: 'row', alignItems: 'center' }}>
             <FontAwesome5 name="motorcycle" size={24} color="#F6EEE4" />
             <View style={{ marginLeft: 12 }}>
               <Text style={{ color: 'white', fontWeight: '700' }}>{motoDisp}/{motoCap} Motos</Text>
@@ -375,7 +448,10 @@ const handleWhatsAppPress = () => {
         {/* Horarios */}
         <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Horarios de Atención</Text>
         {ALL_DAYS.map((day) => {
-          const horarioDia = data.horarios?.find(h => h.diaSemana.toLowerCase() === day);
+          const horarioDia = data.horarios?.find(
+  h => normalizeDay(h.diaSemana) === normalizeDay(day)
+);
+
           const esCerrado = !horarioDia || horarioDia.esCerrado;
           const horarioTexto = (horarioDia && !horarioDia.esCerrado)
             ? `${formatHour(horarioDia.horaAbrir)} - ${formatHour(horarioDia.horaCerrar)}`
@@ -404,10 +480,14 @@ const handleWhatsAppPress = () => {
 
       {/* Reviews Modal */}
       <ReviewsModal
-        visible={modalReviews}
-        onClose={() => setModalReviews(false)}
-        parqueoId={parseInt(parqueoId || '0')}
-      />
+  visible={modalReviews}
+  onClose={() => setModalReviews(false)}
+  parqueoId={parseInt(parqueoId || '0')}
+  onReviewSubmitted={() => {
+    fetchParqueoDetalle(); // 🔥 FORZAMOS REFRESH
+  }}
+/>
+
 
       {/* Imagen fullscreen modal */}
       <Modal visible={modalImage} transparent animationType="fade">
@@ -415,7 +495,12 @@ const handleWhatsAppPress = () => {
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}
           onPress={() => setModalImage(false)}
         >
-          <Image source={{ uri: img }} style={{ width: '90%', height: '75%' }} resizeMode="contain" />
+          <Image
+  source={{ uri: selectedImage || img }}
+  style={{ width: '90%', height: '75%' }}
+  resizeMode="contain"
+/>
+
         </TouchableOpacity>
       </Modal>
     </View>

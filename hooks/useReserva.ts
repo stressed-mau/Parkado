@@ -16,6 +16,37 @@ import {
     METODOS_PAGO
 } from '../types/parqueo';
 
+/**
+ * Serializador seguro para pasar params a expo-router.
+ * Expo Router espera params como Record<string, string>.
+ */
+function serializeReservaParams(data: ReservaData): Record<string, string> {
+    return {
+        parqueoId: String(data.parqueoId ?? ''),
+        parqueoNombre: String(data.parqueoNombre ?? ''),
+        plazaId: String(data.plazaId ?? ''),
+        nroPlazaReal: String(data.nroPlazaReal ?? ''),
+        tipoVehiculo: String(data.tipoVehiculo ?? ''),
+        matricula: String(data.matricula ?? ''),
+        fechaInicioISO: String(data.fechaInicioISO ?? ''),
+        fechaFinISO: String(data.fechaFinISO ?? ''),
+        fechaInicioFormatted: String(data.fechaInicioFormatted ?? ''),
+        fechaFinFormatted: String(data.fechaFinFormatted ?? ''),
+        costoTotal: String(data.costoTotal ?? ''),
+        costoTotalFormatted: String(data.costoTotalFormatted ?? ''),
+        metodoPago: String(data.metodoPago ?? ''),
+        parqueoLat: String(data.parqueoLat ?? ''),
+        parqueoLng: String(data.parqueoLng ?? ''),
+        tarifaAplicada: String(data.tarifaAplicada ?? ''),
+        tarifaAuto: String(data.tarifaAuto ?? ''),
+        tarifaMoto: String(data.tarifaMoto ?? ''),
+        usuarioId: String(data.usuarioId ?? ''),
+        usuarioEmail: String(data.usuarioEmail ?? ''),
+        usuarioNombre: String(data.usuarioNombre ?? ''),
+        timestamp: String(data.timestamp ?? ''),
+    };
+}
+
 export default function useReserva(): UseReservaReturn {
     const router = useRouter();
     const params = useLocalSearchParams<{
@@ -68,7 +99,7 @@ export default function useReserva(): UseReservaReturn {
         cargarUsuario();
     }, []);
 
-    // Función para cargar plazas disponibles - CORREGIDA
+    // Función para cargar plazas disponibles
     const cargarPlazasDisponibles = useCallback(async () => {
         try {
             console.log('🔄 Cargando plazas disponibles para parqueo ID:', parqueoId);
@@ -98,7 +129,7 @@ export default function useReserva(): UseReservaReturn {
 
             setDatosParqueo(parqueoEncontrado);
 
-            // Extraer tarifas - CORREGIDO (sin usar descripcion)
+            // Extraer tarifas
             let tarifaAuto = 0;
             let tarifaMoto = 0;
 
@@ -153,7 +184,7 @@ export default function useReserva(): UseReservaReturn {
         } catch (error: any) {
             console.error('❌ Error cargando datos del parqueo:', error);
             Alert.alert('Error', 'No se pudieron cargar los datos del parqueo: ' + (error?.message || error));
-            
+
             setTarifasReales({ auto: 8.5, moto: 4.0 });
             setPlazasReales([]);
         } finally {
@@ -194,8 +225,7 @@ export default function useReserva(): UseReservaReturn {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    // según tu PDF la API de reservas usa usuarioId en body y no requiere Authorization
-                    // si tu backend cambia y requiere token, descomenta la siguiente línea:
+                    // si tu backend cambia y requiere token, descomenta:
                     // 'Authorization': `Bearer ${userData.token}`
                 },
                 body: JSON.stringify(reservaPayload)
@@ -211,7 +241,6 @@ export default function useReserva(): UseReservaReturn {
             }
 
             console.log('✅ Reserva creada exitosamente:', responseData);
-            // Aseguramos retornar el body creado (idealmente con id)
             return responseData;
 
         } catch (error: any) {
@@ -251,7 +280,6 @@ export default function useReserva(): UseReservaReturn {
                     });
 
                     if (!response.ok) {
-                        // Intentamos parsear mensaje servidor si existe
                         const errorData = await response.json().catch(() => null);
                         const msg = errorData?.message || `Error ${response.status} al actualizar plaza`;
                         throw new Error(msg);
@@ -263,12 +291,10 @@ export default function useReserva(): UseReservaReturn {
                 } catch (err) {
                     lastErr = err;
                     console.warn(`Attempt ${attempt} fallo actualizando plaza:`, err);
-                    // backoff simple
                     await new Promise(r => setTimeout(r, 300 * attempt));
                 }
             }
 
-            // Si llegamos acá, todos los intentos fallaron
             throw lastErr || new Error('Error desconocido actualizando plaza');
         } catch (error: any) {
             console.error('❌ Error actualizando estado de plaza (final):', error);
@@ -280,54 +306,54 @@ export default function useReserva(): UseReservaReturn {
     const plazasDisponiblesPorTipo = useMemo(() => {
         const autos = plazasReales.filter(p => p.tipo === 'auto').length;
         const motos = plazasReales.filter(p => p.tipo === 'moto').length;
-        
+
         console.log(`🎯 Plazas disponibles - Autos: ${autos}, Motos: ${motos}`);
-        
+
         return { autos, motos };
     }, [plazasReales]);
 
     const plazasDisponiblesParaTipo = useMemo(() => {
-        const disponibles = plazasReales.filter(p => 
-            p.tipo === tipoVehiculo && 
+        const disponibles = plazasReales.filter(p =>
+            p.tipo === tipoVehiculo &&
             p.estado === 'libre'
         );
-        
+
         console.log(`🎯 Plazas ${tipoVehiculo} disponibles:`, disponibles.length);
         return disponibles;
     }, [plazasReales, tipoVehiculo]);
 
     const costoTotal = useMemo(() => {
-        const diffMs = fechaFin.getTime() - fechaInicio.getTime(); 
+        const diffMs = fechaFin.getTime() - fechaInicio.getTime();
         if (diffMs <= 0) return 0;
-        
-        const horas = diffMs / 3600000; 
+
+        const horas = diffMs / 3600000;
         const tarifaAplicable = tipoVehiculo === 'auto' ? tarifasReales.auto : tarifasReales.moto;
         return parseFloat((horas * tarifaAplicable).toFixed(2));
     }, [fechaInicio, fechaFin, tipoVehiculo, tarifasReales]);
 
     // Resetear plaza seleccionada al cambiar tipo de vehículo
-    useEffect(() => { 
-        setPlazaSeleccionadaId(null); 
+    useEffect(() => {
+        setPlazaSeleccionadaId(null);
     }, [tipoVehiculo]);
 
     // Handler principal para confirmar reserva (con rollback si falla actualizar plaza)
     const handleConfirmarReserva = async () => {
-        if (!plazaSeleccionadaId) { 
-            Alert.alert("Requerido", "Selecciona una plaza."); 
-            return; 
+        if (!plazaSeleccionadaId) {
+            Alert.alert("Requerido", "Selecciona una plaza.");
+            return;
         }
-        
+
         const matriculaLimpia = matricula.trim().toUpperCase();
-        if (!matriculaLimpia || matriculaLimpia.length < 4) { 
-            Alert.alert("Requerido", "Ingresa una matrícula válida."); 
-            return; 
+        if (!matriculaLimpia || matriculaLimpia.length < 4) {
+            Alert.alert("Requerido", "Ingresa una matrícula válida.");
+            return;
         }
-        
-        if (costoTotal <= 0) { 
-            Alert.alert("Inválido", "Verifica las fechas."); 
-            return; 
+
+        if (costoTotal <= 0) {
+            Alert.alert("Inválido", "Verifica las fechas.");
+            return;
         }
-        
+
         if (!datosParqueo?.latitud || !datosParqueo?.longitud) {
             Alert.alert("Error Interno", "No se pudieron obtener las coordenadas del parqueo.");
             return;
@@ -335,18 +361,18 @@ export default function useReserva(): UseReservaReturn {
 
         if (!userData) {
             Alert.alert(
-                "Sesión Requerida", 
+                "Sesión Requerida",
                 "Debes iniciar sesión para hacer una reserva.",
                 [
                     { text: "Cancelar", style: "cancel" },
-                    { text: "Iniciar Sesión", onPress: () => router.push('/LoginUsuario') }
+                    { text: "Iniciar Sesión", onPress: () => router.push('/Login') }
                 ]
             );
             return;
         }
 
         const plazaSeleccionada = plazasReales.find(p => p.id === plazaSeleccionadaId);
-        
+
         if (!plazaSeleccionada || plazaSeleccionada.estado !== 'libre') {
             Alert.alert("Plaza no disponible", "La plaza seleccionada ya no está disponible. Por favor selecciona otra.");
             cargarPlazasDisponibles();
@@ -358,8 +384,8 @@ export default function useReserva(): UseReservaReturn {
 
         const reservaData: ReservaData = {
             parqueoId: parqueoId,
-            parqueoNombre: datosParqueo.nombre || parqueoNombreParam,
-            plazaId: plazaSeleccionadaId,
+            parqueoNombre: datosParqueo?.nombre || parqueoNombreParam,
+            plazaId: plazaSeleccionadaId!,
             nroPlazaReal: nroPlazaReal,
             tipoVehiculo: tipoVehiculo,
             matricula: matriculaLimpia,
@@ -370,8 +396,8 @@ export default function useReserva(): UseReservaReturn {
             costoTotal: costoTotal.toString(),
             costoTotalFormatted: `${costoTotal.toFixed(2)} Bs`,
             metodoPago: metodoPago,
-            parqueoLat: datosParqueo.latitud.toString(),
-            parqueoLng: datosParqueo.longitud.toString(),
+            parqueoLat: datosParqueo!.latitud.toString(),
+            parqueoLng: datosParqueo!.longitud.toString(),
             tarifaAplicada: (tipoVehiculo === 'auto' ? tarifasReales.auto : tarifasReales.moto).toString(),
             tarifaAuto: tarifasReales.auto.toString(),
             tarifaMoto: tarifasReales.moto.toString(),
@@ -385,6 +411,9 @@ export default function useReserva(): UseReservaReturn {
 
         try {
             setIsCreatingReserva(true);
+
+            // Serializamos una vez para las rutas que lo necesiten
+            const serializedParams = serializeReservaParams(reservaData);
 
             if (metodoPago === 'Efectivo') {
                 // 1) crear reserva
@@ -403,40 +432,31 @@ export default function useReserva(): UseReservaReturn {
 
                 // 2) Si no viene ocupada, intentar actualizar la plaza (con rollback si falla)
                 if (!plazaYaOcupada) {
-                    const plazaIdReal = parseInt(plazaSeleccionadaId);
+                    const plazaIdReal = parseInt(plazaSeleccionadaId!, 10);
                     try {
-                        await actualizarEstadoPlaza(plazaIdReal);
-
-                        // 3) si todo OK, actualizar UI local y recargar plazas
-                        setPlazasReales(prev => 
-                            prev.map(plaza => 
-                                plaza.id === plazaSeleccionadaId 
-                                    ? { ...plaza, estado: 'ocupado' as const }
-                                    : plaza
-                            )
-                        );
+                        
 
                         setTimeout(() => {
                             cargarPlazasDisponibles();
                         }, 1000);
 
                         Alert.alert(
-                            "✅ Reserva Confirmada", 
-                            `Detalles:\n• Parqueo: ${reservaData.parqueoNombre}\n• Plaza: ${reservaData.nroPlazaReal}\n• Vehículo: ${tipoVehiculo}\n• Matrícula: ${matriculaLimpia}\n• Horario: ${fechaInicio.toLocaleString()} - ${fechaFin.toLocaleString()}\n• Costo: ${costoTotal.toFixed(2)} Bs\n• Método: ${metodoPago}\n• ID Reserva: ${reservaCreada.id || 'N/A'}`,
-                            [{ 
-                                text: "Ver Ruta", 
+                            "Reserva Confirmada",
+                            `Se marcara la ruta de la ubicacion actual al parqueo al que se hizo la reserva`,
+                            [{
+                                text: "Ver Ruta",
                                 onPress: () => {
                                     router.push({
-                                        pathname: '/(tabs)/Mapa' as any,
+                                        pathname: '/(tabs)/Mapa',
                                         params: {
-                                            destLat: reservaData.parqueoLat,
-                                            destLng: reservaData.parqueoLng,
+                                            destLat: String(reservaData.parqueoLat),
+                                            destLng: String(reservaData.parqueoLng),
                                             destNombre: reservaData.parqueoNombre,
-                                            reservaId: reservaCreada.id?.toString() || 'N/A'
+                                            reservaId: reservaCreada?.id ? String(reservaCreada.id) : 'N/A'
                                         }
                                     });
                                 }
-                            }] 
+                            }]
                         );
                     } catch (errorUpdatingPlaza: any) {
                         console.error('Error actualizando plaza tras crear reserva -> intentando rollback', errorUpdatingPlaza);
@@ -450,7 +470,6 @@ export default function useReserva(): UseReservaReturn {
                                         'Content-Type': 'application/json',
                                         'Authorization': `Bearer ${userData?.token}`
                                     },
-                                    // algunos endpoints DELETE no esperan body; si tu API lo requiere ajusta
                                     body: JSON.stringify({ usuarioId: Number(userData?.id) })
                                 });
 
@@ -470,16 +489,15 @@ export default function useReserva(): UseReservaReturn {
                             Alert.alert('Error', 'La reserva no pudo completarse y no se pudo revertir automáticamente. Intenta de nuevo más tarde.');
                         }
 
-                        // finalmente lanzamos el error para que el catch global muestre el mensaje apropiado
                         throw new Error(errorUpdatingPlaza?.message || 'No se pudo actualizar la plaza luego de crear la reserva.');
                     }
                 } else {
                     // Si ya viene ocupada desde la respuesta del POST: aceptamos como OK
                     console.log('La plaza ya viene marcada como OCUPADO en la respuesta del POST, no hace falta PATCH.');
 
-                    setPlazasReales(prev => 
-                        prev.map(plaza => 
-                            plaza.id === plazaSeleccionadaId 
+                    setPlazasReales(prev =>
+                        prev.map(plaza =>
+                            plaza.id === plazaSeleccionadaId
                                 ? { ...plaza, estado: 'ocupado' as const }
                                 : plaza
                         )
@@ -490,36 +508,36 @@ export default function useReserva(): UseReservaReturn {
                     }, 1000);
 
                     Alert.alert(
-                        "✅ Reserva Confirmada", 
-                        `Detalles:\n• Parqueo: ${reservaData.parqueoNombre}\n• Plaza: ${reservaData.nroPlazaReal}\n• Vehículo: ${tipoVehiculo}\n• Matrícula: ${matriculaLimpia}\n• Horario: ${fechaInicio.toLocaleString()} - ${fechaFin.toLocaleString()}\n• Costo: ${costoTotal.toFixed(2)} Bs\n• Método: ${metodoPago}\n• ID Reserva: ${reservaCreada.id || 'N/A'}`,
-                        [{ 
-                            text: "Ver Ruta", 
+                        "✅ Reserva Confirmada",
+                        `Detalles:\n• Parqueo: ${reservaData.parqueoNombre}\n• Plaza: ${reservaData.nroPlazaReal}\n• Vehículo: ${tipoVehiculo}\n• Matrícula: ${matriculaLimpia}\n• Horario: ${fechaInicio.toLocaleString()} - ${fechaFin.toLocaleString()}\n• Costo: ${costoTotal.toFixed(2)} Bs\n• Método: ${metodoPago}\n• ID Reserva: ${reservaCreada?.id || 'N/A'}`,
+                        [{
+                            text: "Ver Ruta",
                             onPress: () => {
                                 router.push({
-                                    pathname: '/(tabs)/Mapa' as any,
+                                    pathname: '/(tabs)/Mapa',
                                     params: {
-                                        destLat: reservaData.parqueoLat,
-                                        destLng: reservaData.parqueoLng,
+                                        destLat: String(reservaData.parqueoLat),
+                                        destLng: String(reservaData.parqueoLng),
                                         destNombre: reservaData.parqueoNombre,
-                                        reservaId: reservaCreada.id?.toString() || 'N/A'
+                                        reservaId: reservaCreada?.id ? String(reservaCreada.id) : 'N/A'
                                     }
                                 });
                             }
-                        }] 
+                        }]
                     );
                 }
 
             } else if (metodoPago === 'QR') {
-                console.log('🔄 Navegando a PagoQR con datos:', reservaData);
-                router.push({ 
-                    pathname: '/PagoQR' as any, 
-                    params: reservaData 
+                console.log('🔄 Navegando a PagoQR con datos (serializados):', serializedParams);
+                router.push({
+                    pathname: '/PagoQR',
+                    params: serializedParams
                 });
             } else if (metodoPago === 'Tarjeta') {
-                console.log('🔄 Navegando a PagoTarjeta con datos:', reservaData);
-                router.push({ 
-                    pathname: '/PagoTarjeta' as any, 
-                    params: reservaData 
+                console.log('🔄 Navegando a PagoTarjeta con datos (serializados):', serializedParams);
+                router.push({
+                    pathname: '/PagoTarjeta',
+                    params: serializedParams
                 });
             }
 
@@ -549,7 +567,7 @@ export default function useReserva(): UseReservaReturn {
         isCreatingReserva,
         datosParqueo,
         tarifasReales,
-        
+
         // Setters
         setTipoVehiculo,
         setPlazaSeleccionadaId,
@@ -561,16 +579,20 @@ export default function useReserva(): UseReservaReturn {
         setModeInicioPicker,
         setShowFinPicker,
         setModeFinPicker,
-        
+
         // Funciones
         cargarPlazasDisponibles,
         crearReservaEnAPI,
         actualizarEstadoPlaza,
         handleConfirmarReserva,
-        
+
         // Memoizados
         plazasDisponiblesPorTipo,
         plazasDisponiblesParaTipo,
         costoTotal,
     };
 }
+
+
+
+

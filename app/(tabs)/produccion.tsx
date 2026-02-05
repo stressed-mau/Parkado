@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
+import type { ReactNode } from "react";
 import {
   View,
   Text,
@@ -8,6 +9,12 @@ import {
 } from "react-native";
 
 import Svg, { Rect, Text as SvgText, Line } from "react-native-svg";
+import {
+  Ionicons,
+  MaterialCommunityIcons,
+  FontAwesome5
+} from "@expo/vector-icons";
+
 import { calcularRequerimientos } from "../../components/lib/modeloProduccion";
 
 export default function ProduccionScreen() {
@@ -33,10 +40,6 @@ export default function ProduccionScreen() {
   const resultado = valido
     ? calcularRequerimientos(objetivo, tiempoMin, moldesParaCalculo)
     : null;
-
-  // ----------------------------
-  // valores seguros (para no desaparecer)
-  // ----------------------------
 
   const personasValues = resultado
     ? [
@@ -109,7 +112,11 @@ export default function ProduccionScreen() {
       {/* PERSONAL */}
 
       <View style={styles.block}>
-        <Text style={styles.section}>👷 Personal por proceso</Text>
+
+        <View style={styles.sectionRow}>
+          <Ionicons name="people" size={18} color="#065f46" />
+          <Text style={styles.sectionText}>Personal por proceso</Text>
+        </View>
 
         <VerticalBarChart
           labels={personasLabels}
@@ -120,24 +127,49 @@ export default function ProduccionScreen() {
       {/* EQUIPOS */}
 
       <View style={styles.block}>
-        <Text style={styles.section}>🏭 Equipos</Text>
+
+        <View style={styles.sectionRow}>
+          <MaterialCommunityIcons name="factory" size={18} color="#065f46" />
+          <Text style={styles.sectionText}>Equipos</Text>
+        </View>
 
         <View style={styles.kpis}>
 
           <Kpi
-            icon="⚙️"
+            icon={
+              <MaterialCommunityIcons
+                name="cog"
+                size={24}
+                color="#059669"
+                style={{ marginBottom: 4 }}
+              />
+            }
             title="Moledoras"
             value={resultado?.equipos.moledoras ?? 0}
           />
 
           <Kpi
-            icon="⚖️"
+            icon={
+              <MaterialCommunityIcons
+                name="scale-balance"
+                size={24}
+                color="#059669"
+                style={{ marginBottom: 4 }}
+              />
+            }
             title="Balanzas"
             value={resultado?.equipos.balanzas ?? 0}
           />
 
           <Kpi
-            icon="🧩"
+            icon={
+              <FontAwesome5
+                name="cubes"
+                size={22}
+                color="#059669"
+                style={{ marginBottom: 4 }}
+              />
+            }
             title="Moldes usados"
             value={resultado?.equipos.moldesUsados ?? 0}
           />
@@ -148,7 +180,11 @@ export default function ProduccionScreen() {
       {/* MATERIALES */}
 
       <View style={styles.block}>
-        <Text style={styles.section}>🧪 Material requerido (g)</Text>
+
+        <View style={styles.sectionRow}>
+          <MaterialCommunityIcons name="flask" size={18} color="#065f46" />
+          <Text style={styles.sectionText}>Material requerido (g)</Text>
+        </View>
 
         <HorizontalBarChart
           labels={materialesLabels}
@@ -167,13 +203,13 @@ function Kpi({
   title,
   value
 }: {
-  icon: string;
+  icon: ReactNode;
   title: string;
   value: number;
 }) {
   return (
     <View style={styles.kpiCard}>
-      <Text style={styles.kpiIcon}>{icon}</Text>
+      {icon}
       <Text style={styles.kpiValue}>{value}</Text>
       <Text style={styles.kpiLabel}>{title}</Text>
     </View>
@@ -216,7 +252,7 @@ function VerticalBarChart({
           const y = chartTop + (chartHeight / 3) * i;
           return (
             <Line
-              key={i}
+              key={`grid-${i}`}
               x1={0}
               x2={width}
               y1={y}
@@ -234,7 +270,7 @@ function VerticalBarChart({
           const y = chartBottom - h;
 
           return (
-            <>
+            <Fragment key={`bar-${i}`}>
 
               <Rect
                 x={x}
@@ -276,7 +312,7 @@ function VerticalBarChart({
                 {labels[i]}
               </SvgText>
 
-            </>
+            </Fragment>
           );
         })}
 
@@ -316,7 +352,7 @@ function HorizontalBarChart({
           const y = i * (rowHeight + gap);
 
           return (
-            <>
+            <Fragment key={`hbar-${i}`}>
 
               <SvgText
                 x={leftLabel - 8}
@@ -348,7 +384,7 @@ function HorizontalBarChart({
                 {Math.round(v)} g
               </SvgText>
 
-            </>
+            </Fragment>
           );
         })}
 
@@ -414,11 +450,17 @@ const styles = StyleSheet.create({
     borderColor: "#10b981"
   },
 
-  section: {
+  sectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12
+  },
+
+  sectionText: {
+    marginLeft: 6,
     fontSize: 16,
     fontWeight: "700",
-    color: "#065f46",
-    marginBottom: 12
+    color: "#065f46"
   },
 
   kpis: {
@@ -435,11 +477,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#a7f3d0"
-  },
-
-  kpiIcon: {
-    fontSize: 22,
-    marginBottom: 4
   },
 
   kpiValue: {

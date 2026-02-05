@@ -7,14 +7,14 @@ import {
   StyleSheet
 } from "react-native";
 
+import Svg, { Rect, Text as SvgText, Line } from "react-native-svg";
 import { calcularRequerimientos } from "../../components/lib/modeloProduccion";
 
 export default function ProduccionScreen() {
 
   const [macetas, setMacetas] = useState("50");
   const [tiempo, setTiempo] = useState("140");
-
-  const [moldesManual, setMoldesManual] = useState<string>("");
+  const [moldesManual, setMoldesManual] = useState("3");
 
   const objetivo = Number(macetas);
   const tiempoMin = Number(tiempo);
@@ -25,135 +25,340 @@ export default function ProduccionScreen() {
     !isNaN(objetivo) &&
     !isNaN(tiempoMin);
 
+  const moldesParaCalculo =
+    moldesManual.trim() === ""
+      ? undefined
+      : Number(moldesManual);
+
   const resultado = valido
-    ? calcularRequerimientos(objetivo, tiempoMin)
+    ? calcularRequerimientos(objetivo, tiempoMin, moldesParaCalculo)
     : null;
 
-  const moldesFinales =
-  moldesManual.trim() === ""
-    ? resultado?.equipos?.moldesSugeridos
-    : Number(moldesManual);
+  // ----------------------------
+  // valores seguros (para no desaparecer)
+  // ----------------------------
 
+  const personasValues = resultado
+    ? [
+        resultado.personas.molienda,
+        resultado.personas.pesado,
+        resultado.personas.mezclado,
+        resultado.personas.moldes,
+        resultado.personas.desmolde
+      ]
+    : [0, 0, 0, 0, 0];
+
+  const materialesValues = resultado
+    ? [
+        resultado.materiales.cascara,
+        resultado.materiales.alginato,
+        resultado.materiales.agua
+      ]
+    : [0, 0, 0];
+
+  const personasLabels = ["Mol", "Pes", "Mez", "Mol", "Des"];
+  const materialesLabels = ["Cáscara", "Alginato", "Agua"];
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
 
-      <Text style={styles.title}>
-        Plan de producción
-      </Text>
+      <Text style={styles.title}>Plan de producción</Text>
+
+      {/* INPUTS */}
+
+      <View style={styles.rowInputs}>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Macetas</Text>
+          <TextInput
+            value={macetas}
+            onChangeText={setMacetas}
+            keyboardType="numeric"
+            style={styles.input}
+          />
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Tiempo (min)</Text>
+          <TextInput
+            value={tiempo}
+            onChangeText={setTiempo}
+            keyboardType="numeric"
+            style={styles.input}
+          />
+        </View>
+
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.label}>
-          Macetas a producir
+          Moldes disponibles (sugerido {resultado?.equipos.moldesSugeridos ?? 0})
         </Text>
 
         <TextInput
-          value={macetas}
-          onChangeText={setMacetas}
+          value={moldesManual}
+          onChangeText={setMoldesManual}
           keyboardType="numeric"
           style={styles.input}
         />
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>
-          Tiempo disponible (min)
-        </Text>
+      {/* PERSONAL */}
 
-        <TextInput
-          value={tiempo}
-          onChangeText={setTiempo}
-          keyboardType="numeric"
-          style={styles.input}
+      <View style={styles.block}>
+        <Text style={styles.section}>👷 Personal por proceso</Text>
+
+        <VerticalBarChart
+          labels={personasLabels}
+          values={personasValues}
         />
       </View>
 
-      {resultado && (
+      {/* EQUIPOS */}
 
-        <>
-          {/* ---------------- PERSONAS ---------------- */}
+      <View style={styles.block}>
+        <Text style={styles.section}>🏭 Equipos</Text>
 
-          <View style={styles.block}>
+        <View style={styles.kpis}>
 
-            <Text style={styles.section}>
-              👷 Personal requerido
-            </Text>
+          <Kpi
+            icon="⚙️"
+            title="Moledoras"
+            value={resultado?.equipos.moledoras ?? 0}
+          />
 
-            <Text style={styles.row}>Molienda: {resultado.personas.molienda}</Text>
-            <Text style={styles.row}>Pesado: {resultado.personas.pesado}</Text>
-            <Text style={styles.row}>Mezclado: {resultado.personas.mezclado}</Text>
-            <Text style={styles.row}>Moldes: {resultado.personas.moldes}</Text>
-            <Text style={styles.row}>Desmolde: {resultado.personas.desmolde}</Text>
+          <Kpi
+            icon="⚖️"
+            title="Balanzas"
+            value={resultado?.equipos.balanzas ?? 0}
+          />
 
-          </View>
+          <Kpi
+            icon="🧩"
+            title="Moldes usados"
+            value={resultado?.equipos.moldesUsados ?? 0}
+          />
 
-          {/* ---------------- EQUIPOS ---------------- */}
+        </View>
+      </View>
 
-          <View style={styles.block}>
+      {/* MATERIALES */}
 
-            <Text style={styles.section}>
-              🏭 Equipos
-            </Text>
+      <View style={styles.block}>
+        <Text style={styles.section}>🧪 Material requerido (g)</Text>
 
-            <Text style={styles.row}>
-              Moledoras: {resultado.equipos.moledoras}
-            </Text>
-
-            <Text style={styles.row}>
-              Balanzas: {resultado.equipos.balanzas}
-            </Text>
-
-            <View style={{ marginTop: 8 }}>
-
-              <Text style={styles.label}>
-                Moldes (sugerido: {resultado.equipos.moldesSugeridos})
-              </Text>
-
-              <TextInput
-                placeholder="Usar sugerido"
-                value={moldesManual}
-                onChangeText={setMoldesManual}
-                keyboardType="numeric"
-                style={styles.input}
-                placeholderTextColor="#888"
-              />
-
-              <Text style={styles.hint}>
-                Moldes usados en el plan: {moldesFinales}
-              </Text>
-
-            </View>
-
-          </View>
-
-          {/* ---------------- MATERIALES ---------------- */}
-
-          <View style={styles.block}>
-
-            <Text style={styles.section}>
-              🧪 Material necesario
-            </Text>
-
-            <Text style={styles.row}>
-              Cáscara: {resultado.materiales.cascara} g
-            </Text>
-
-            <Text style={styles.row}>
-              Alginato: {resultado.materiales.alginato} g
-            </Text>
-
-            <Text style={styles.row}>
-              Agua: {resultado.materiales.agua} g
-            </Text>
-
-          </View>
-
-        </>
-      )}
+        <HorizontalBarChart
+          labels={materialesLabels}
+          values={materialesValues}
+        />
+      </View>
 
     </ScrollView>
   );
 }
+
+/* ---------------- KPI ---------------- */
+
+function Kpi({
+  icon,
+  title,
+  value
+}: {
+  icon: string;
+  title: string;
+  value: number;
+}) {
+  return (
+    <View style={styles.kpiCard}>
+      <Text style={styles.kpiIcon}>{icon}</Text>
+      <Text style={styles.kpiValue}>{value}</Text>
+      <Text style={styles.kpiLabel}>{title}</Text>
+    </View>
+  );
+}
+
+/* ---------------- PERSONAL ---------------- */
+
+function VerticalBarChart({
+  labels,
+  values
+}: {
+  labels: string[];
+  values: number[];
+}) {
+
+  const width = 320;
+  const height = 190;
+
+  const chartBottom = 145;
+  const chartTop = 20;
+  const chartHeight = chartBottom - chartTop;
+
+  const max = Math.max(...values, 1);
+  const barWidth = 34;
+  const gap = 22;
+
+  const totalWidth =
+    values.length * barWidth +
+    (values.length - 1) * gap;
+
+  const startX = (width - totalWidth) / 2;
+
+  return (
+    <View style={{ alignItems: "center" }}>
+
+      <Svg width={width} height={height}>
+
+        {[...Array(4)].map((_, i) => {
+          const y = chartTop + (chartHeight / 3) * i;
+          return (
+            <Line
+              key={i}
+              x1={0}
+              x2={width}
+              y1={y}
+              y2={y}
+              stroke="#bbf7d0"
+              strokeWidth={1}
+            />
+          );
+        })}
+
+        {values.map((v, i) => {
+
+          const h = (v / max) * chartHeight;
+          const x = startX + i * (barWidth + gap);
+          const y = chartBottom - h;
+
+          return (
+            <>
+
+              <Rect
+                x={x}
+                y={y + 4}
+                width={barWidth}
+                height={h}
+                rx={10}
+                fill="#000"
+                opacity={0.06}
+              />
+
+              <Rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={h}
+                rx={10}
+                fill="#10b981"
+              />
+
+              <SvgText
+                x={x + barWidth / 2}
+                y={y - 6}
+                fontSize="11"
+                fill="#065f46"
+                fontWeight="700"
+                textAnchor="middle"
+              >
+                {v}
+              </SvgText>
+
+              <SvgText
+                x={x + barWidth / 2}
+                y={chartBottom + 16}
+                fontSize="11"
+                fill="#374151"
+                textAnchor="middle"
+              >
+                {labels[i]}
+              </SvgText>
+
+            </>
+          );
+        })}
+
+      </Svg>
+
+    </View>
+  );
+}
+
+/* ---------------- MATERIALES ---------------- */
+
+function HorizontalBarChart({
+  labels,
+  values
+}: {
+  labels: string[];
+  values: number[];
+}) {
+
+  const width = 320;
+  const rowHeight = 34;
+  const gap = 14;
+  const leftLabel = 90;
+  const barMaxWidth = 190;
+
+  const max = Math.max(...values, 1);
+  const height = values.length * (rowHeight + gap) + 10;
+
+  return (
+    <View style={{ alignItems: "center" }}>
+
+      <Svg width={width} height={height}>
+
+        {values.map((v, i) => {
+
+          const barWidth = (v / max) * barMaxWidth;
+          const y = i * (rowHeight + gap);
+
+          return (
+            <>
+
+              <SvgText
+                x={leftLabel - 8}
+                y={y + 22}
+                fontSize="12"
+                fill="#065f46"
+                textAnchor="end"
+                fontWeight="600"
+              >
+                {labels[i]}
+              </SvgText>
+
+              <Rect
+                x={leftLabel}
+                y={y + 4}
+                width={barWidth}
+                height={20}
+                rx={10}
+                fill="#10b981"
+              />
+
+              <SvgText
+                x={leftLabel + barWidth + 6}
+                y={y + 20}
+                fontSize="11"
+                fill="#065f46"
+                fontWeight="700"
+              >
+                {Math.round(v)} g
+              </SvgText>
+
+            </>
+          );
+        })}
+
+      </Svg>
+
+    </View>
+  );
+}
+
+/* ---------------- ESTILOS ---------------- */
 
 const styles = StyleSheet.create({
 
@@ -166,39 +371,45 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#111",
-    marginBottom: 16
+    color: "#064e3b",
+    marginBottom: 14
+  },
+
+  rowInputs: {
+    flexDirection: "row",
+    gap: 12
   },
 
   card: {
+    flex: 1,
     backgroundColor: "#f9fafb",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb"
+    borderColor: "#d1fae5"
   },
 
   label: {
-    color: "#111",
+    color: "#065f46",
     marginBottom: 6,
-    fontWeight: "500"
+    fontWeight: "600"
   },
 
   input: {
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
+    borderColor: "#a7f3d0",
+    borderRadius: 10,
     padding: 10,
-    color: "#111",
-    backgroundColor: "#fff"
+    color: "#064e3b",
+    backgroundColor: "#ffffff"
   },
 
   block: {
-    marginTop: 16,
+    marginTop: 18,
     backgroundColor: "#ecfdf5",
     padding: 14,
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: "#10b981"
   },
@@ -207,17 +418,41 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#065f46",
-    marginBottom: 8
+    marginBottom: 12
   },
 
-  row: {
-    color: "#111",
+  kpis: {
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+
+  kpiCard: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    paddingVertical: 14,
+    marginHorizontal: 4,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#a7f3d0"
+  },
+
+  kpiIcon: {
+    fontSize: 22,
     marginBottom: 4
   },
 
-  hint: {
-    marginTop: 6,
-    color: "#065f46",
-    fontSize: 12
+  kpiValue: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#047857"
+  },
+
+  kpiLabel: {
+    fontSize: 12,
+    color: "#374151",
+    marginTop: 2,
+    textAlign: "center"
   }
+
 });

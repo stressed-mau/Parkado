@@ -154,8 +154,6 @@ export default function ProduccionScreen() {
     dias > 0 &&
     objetivoDia > 0;
 
-  /* ---------------- mínimos por proceso ---------------- */
-
   const MIN_PERSONAS_GRUPO = 5;
 
   const gruposRecomendados =
@@ -167,10 +165,6 @@ export default function ProduccionScreen() {
     gruposRecomendados > 0
       ? Math.floor(personasTotales / gruposRecomendados)
       : 0;
-
-  /* -------------------------------------------------------
-     capacidad real de un grupo
-     ------------------------------------------------------- */
 
   function capacidadGrupo(personasGrupo: number) {
 
@@ -220,8 +214,6 @@ export default function ProduccionScreen() {
   const macetasTotalesPeriodo =
     macetasTotalesDia * dias;
 
-  /* ---------------- personas por proceso por grupo ---------------- */
-
   const resultadoBaseGrupo =
     macetasPorGrupo > 0
       ? calcularRequerimientos(macetasPorGrupo, tiempoMin)
@@ -231,8 +223,6 @@ export default function ProduccionScreen() {
     resultadoBaseGrupo
       ? repartirPersonas(resultadoBaseGrupo.personas, personasPorGrupo)
       : null;
-
-  /* ---------------- materiales ---------------- */
 
   const materialPorGrupo = resultadoBaseGrupo?.materiales;
 
@@ -244,8 +234,6 @@ export default function ProduccionScreen() {
           agua: materialPorGrupo.agua / personasPorGrupo
         }
       : null;
-
-  /* ---------------- gráficos día completo ---------------- */
 
   const resultadoLinea =
     macetasTotalesDia > 0
@@ -273,6 +261,17 @@ export default function ProduccionScreen() {
   const personasLabels = ["Molienda", "Pesado", "Mezcla", "Moldeado", "Desmol"];
   const materialesLabels = ["Cáscara", "Alginato", "Agua"];
 
+  const personasUsadasDia = personasValues.reduce((a, b) => a + b, 0);
+
+  const cargaPromedioProceso =
+    personasValues.length > 0
+      ? personasUsadasDia / personasValues.length
+      : 0;
+
+  const balancePersonalDia = personasTotales - personasUsadasDia;
+
+  const cumpleObjetivo = macetasTotalesDia >= objetivoDia;
+
   return (
     <ScrollView style={styles.container}>
 
@@ -281,7 +280,6 @@ export default function ProduccionScreen() {
       {/* ENTRADAS */}
 
       <View style={styles.rowInputs}>
-
         <View style={styles.card}>
           <Text style={styles.label}>Personas disponibles</Text>
           <TextInput
@@ -301,11 +299,9 @@ export default function ProduccionScreen() {
             style={styles.input}
           />
         </View>
-
       </View>
 
       <View style={styles.rowInputs}>
-
         <View style={styles.card}>
           <Text style={styles.label}>Días de trabajo</Text>
           <TextInput
@@ -325,34 +321,108 @@ export default function ProduccionScreen() {
             style={styles.input}
           />
         </View>
-
       </View>
 
       {/* PLANIFICACIÓN */}
 
       <View style={styles.block}>
-
         <View style={styles.sectionRow}>
           <MaterialCommunityIcons name="calendar-clock" size={18} color="#065f46" />
           <Text style={styles.sectionText}>Planificación según el modelo</Text>
         </View>
 
         <View style={styles.kpis}>
-
           <Kpi icon={<Ionicons name="people" size={22} color="#059669" />} title="Grupos" value={gruposRecomendados} />
           <Kpi icon={<MaterialCommunityIcons name="account-group" size={22} color="#059669" />} title="Personas por grupo" value={personasPorGrupo} />
           <Kpi icon={<MaterialCommunityIcons name="flower-pot" size={22} color="#059669" />} title="Macetas por grupo" value={macetasPorGrupo} />
           <Kpi icon={<Ionicons name="calendar" size={22} color="#059669" />} title="Macetas totales / día" value={macetasTotalesDia} />
           <Kpi icon={<Ionicons name="calendar-outline" size={22} color="#059669" />} title="Macetas totales periodo" value={macetasTotalesPeriodo} />
-
         </View>
-
       </View>
 
-      {/* PERSONAS POR PROCESO (por grupo) */}
+      {/* INDICADORES */}
 
       <View style={styles.block}>
+        <View style={styles.sectionRow}>
+          <MaterialCommunityIcons name="chart-timeline-variant" size={18} color="#065f46" />
+          <Text style={styles.sectionText}>Carga promedio por proceso</Text>
+        </View>
 
+        <Text style={[styles.simpleRow, { fontSize: 18, fontWeight: "800" }]}>
+          {cargaPromedioProceso.toFixed(2)} personas / proceso
+        </Text>
+      </View>
+
+      <View style={styles.block}>
+        <View style={styles.sectionRow}>
+          <Ionicons name="people-outline" size={18} color="#065f46" />
+          <Text style={styles.sectionText}>Balance de personal (día)</Text>
+        </View>
+
+        <Text
+          style={[
+            styles.simpleRow,
+            {
+              fontSize: 18,
+              fontWeight: "800",
+              color: balancePersonalDia >= 0 ? "#047857" : "#b91c1c"
+            }
+          ]}
+        >
+          {balancePersonalDia >= 0
+            ? `Sobran ${balancePersonalDia} personas`
+            : `Faltan ${Math.abs(balancePersonalDia)} personas`}
+        </Text>
+      </View>
+
+      <View style={styles.block}>
+        <View style={styles.sectionRow}>
+          <Ionicons
+            name={cumpleObjetivo ? "checkmark-circle" : "close-circle"}
+            size={18}
+            color={cumpleObjetivo ? "#16a34a" : "#dc2626"}
+          />
+          <Text style={styles.sectionText}>Cumplimiento del objetivo diario</Text>
+        </View>
+
+        <Text
+          style={[
+            styles.simpleRow,
+            {
+              fontSize: 18,
+              fontWeight: "800",
+              color: cumpleObjetivo ? "#047857" : "#b91c1c"
+            }
+          ]}
+        >
+          {cumpleObjetivo
+            ? "Se cumple el objetivo de producción"
+            : "No se alcanza el objetivo de producción"}
+        </Text>
+
+        <Text style={styles.simpleRow}>
+          Objetivo: {objetivoDia} – Producción real: {macetasTotalesDia}
+        </Text>
+      </View>
+
+      {/* INDICADOR VISUAL */}
+
+      <View style={styles.block}>
+        <View style={styles.sectionRow}>
+          <MaterialCommunityIcons name="target" size={18} color="#065f46" />
+          <Text style={styles.sectionText}>Indicador visual de producción</Text>
+        </View>
+
+        <GoalGauge objetivo={objetivoDia} real={macetasTotalesDia} />
+
+        <View style={{ marginTop: 16 }}>
+          <MiniCompareBar objetivo={objetivoDia} real={macetasTotalesDia} />
+        </View>
+      </View>
+
+      {/* PERSONAS POR PROCESO */}
+
+      <View style={styles.block}>
         <View style={styles.sectionRow}>
           <Ionicons name="people-circle" size={18} color="#065f46" />
           <Text style={styles.sectionText}>Personas por proceso (por grupo)</Text>
@@ -367,13 +437,11 @@ export default function ProduccionScreen() {
             <Text style={styles.simpleRow}>Desmolde: {personasGrupo.desmolde}</Text>
           </>
         )}
-
       </View>
 
       {/* MATERIALES */}
 
       <View style={styles.block}>
-
         <View style={styles.sectionRow}>
           <MaterialCommunityIcons name="flask" size={18} color="#065f46" />
           <Text style={styles.sectionText}>Material por grupo (día)</Text>
@@ -386,11 +454,9 @@ export default function ProduccionScreen() {
             <Text style={styles.simpleRow}>Agua: {Math.round(materialPorGrupo.agua)} g</Text>
           </>
         )}
-
       </View>
 
       <View style={styles.block}>
-
         <View style={styles.sectionRow}>
           <MaterialCommunityIcons name="account-hard-hat" size={18} color="#065f46" />
           <Text style={styles.sectionText}>Material por persona</Text>
@@ -403,31 +469,26 @@ export default function ProduccionScreen() {
             <Text style={styles.simpleRow}>Agua: {Math.round(materialPorPersona.agua)} g</Text>
           </>
         )}
-
       </View>
 
       {/* GRÁFICOS */}
 
       <View style={styles.block}>
-
         <View style={styles.sectionRow}>
           <Ionicons name="bar-chart" size={18} color="#065f46" />
           <Text style={styles.sectionText}>Personal por proceso (día)</Text>
         </View>
 
         <VerticalBarChart labels={personasLabels} values={personasValues} />
-
       </View>
 
       <View style={styles.block}>
-
         <View style={styles.sectionRow}>
           <MaterialCommunityIcons name="flask" size={18} color="#065f46" />
           <Text style={styles.sectionText}>Material total del día (g)</Text>
         </View>
 
         <HorizontalBarChart labels={materialesLabels} values={materialesValues} />
-
       </View>
 
     </ScrollView>
@@ -445,6 +506,101 @@ function Kpi({ icon, title, value }: { icon: ReactNode; title: string; value: nu
       <Text style={styles.kpiValue}>{value}</Text>
       <Text style={styles.kpiLabel}>{title}</Text>
     </View>
+  );
+}
+
+/* ================= MEDIDOR CON LEYENDA ================= */
+
+function GoalGauge({
+  objetivo,
+  real
+}: {
+  objetivo: number;
+  real: number;
+}) {
+
+  const max = Math.max(objetivo * 1.2, real, 1);
+
+  const pctObjetivo = Math.min(objetivo / max, 1);
+  const pctReal = Math.min(real / max, 1);
+
+  return (
+    <View>
+
+      <Text style={{ fontWeight: "700", color: "#065f46", marginBottom: 4 }}>
+        Comparación entre producción real y objetivo del día
+      </Text>
+
+      <Text style={{ fontSize: 12, color: "#065f46", marginBottom: 8 }}>
+        El objetivo es la cantidad de macetas que se planificó producir en el día.
+      </Text>
+
+      {/* Leyenda */}
+      <View style={{ marginBottom: 8 }}>
+
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+          <View style={[styles.legendBox, { backgroundColor: "#10b981" }]} />
+          <Text style={styles.legendText}>Producción real del día</Text>
+        </View>
+
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={[styles.legendBox, { backgroundColor: "#dc2626" }]} />
+          <Text style={styles.legendText}>Objetivo planificado del día</Text>
+        </View>
+
+      </View>
+
+      <View style={styles.gaugeBase}>
+        <View
+          style={[
+            styles.gaugeReal,
+            { width: `${pctReal * 100}%` }
+          ]}
+        />
+
+        <View
+          style={[
+            styles.gaugeTarget,
+            { left: `${pctObjetivo * 100}%` }
+          ]}
+        />
+      </View>
+
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          marginTop: 6
+        }}
+      >
+        <Text style={styles.gaugeText}>0</Text>
+        <Text style={styles.gaugeText}>Objetivo: {objetivo}</Text>
+        <Text style={styles.gaugeText}>Real: {real}</Text>
+      </View>
+
+    </View>
+  );
+}
+
+/* ================= MINI COMPARADOR ================= */
+
+function MiniCompareBar({
+  objetivo,
+  real
+}: {
+  objetivo: number;
+  real: number;
+}) {
+
+  const max = Math.max(objetivo, real, 1);
+
+  return (
+    <View>
+
+       
+      </View>
+
+       
   );
 }
 
@@ -639,6 +795,63 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#064e3b",
     marginBottom: 6,
+    fontWeight: "600"
+  },
+
+  miniBarBg: {
+    width: "100%",
+    height: 10,
+    backgroundColor: "#d1fae5",
+    borderRadius: 6,
+    overflow: "hidden",
+    marginTop: 4
+  },
+
+  miniBarFill: {
+    height: 10,
+    borderRadius: 6
+  },
+
+  gaugeBase: {
+    width: "100%",
+    height: 16,
+    backgroundColor: "#d1fae5",
+    borderRadius: 10,
+    overflow: "hidden",
+    position: "relative"
+  },
+
+  gaugeReal: {
+    height: 16,
+    backgroundColor: "#10b981",
+    borderRadius: 10
+  },
+
+  gaugeTarget: {
+    position: "absolute",
+    top: -4,
+    width: 3,
+    height: 24,
+    backgroundColor: "#dc2626",
+    borderRadius: 2
+  },
+
+  gaugeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#065f46"
+  },
+
+  legendBox: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    marginRight: 6
+  },
+
+  legendText: {
+    fontSize: 12,
+    color: "#064e3b",
     fontWeight: "600"
   }
 

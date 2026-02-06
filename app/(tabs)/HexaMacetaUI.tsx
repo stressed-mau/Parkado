@@ -15,8 +15,27 @@ import {
   FontAwesome5
 } from "@expo/vector-icons";
 
+/* =========================
+   PALETA
+========================= */
+
+const COLORS = {
+  bg: "#fff7ed",
+  card: "#ffffff",
+  primary: "#9f1239",
+  secondary: "#7c2d12",
+  accent: "#fb7185",
+  accentSoft: "#fda4af",
+  blue: "#60a5fa",
+  blueSoft: "#93c5fd",
+  border: "#fed7aa",
+  soft: "#ffedd5",
+  textDark: "#7c2d12",
+  grid: "#fde68a"
+};
+
 /* ============================================================
-   MODELO (antes estaba en ../../components/lib/modeloProduccion)
+   MODELO
    ============================================================ */
 
 type Resultado = {
@@ -40,28 +59,21 @@ type Resultado = {
   };
 };
 
-/*
-  Modelo simple y coherente con tu UI.
-  Todas las fórmulas se pueden ajustar luego
-  sin tocar la pantalla.
-*/
 function calcularRequerimientos(
   macetas: number,
   tiempoMin: number,
   moldesDisponibles?: number
 ) {
 
-  const r = macetas / tiempoMin; // macetas por minuto
+  const r = macetas / tiempoMin;
 
-  // ---- tiempos estándar (min/maceta) - informe
   const tPes = 1.0;
   const tMez = 3.083;
   const tAce = 0.3;
   const tDes = 0.7;
 
-  // ---- molienda por capacidad (g/min)
-  const capacidadMolienda = 286.7; // g/min por persona
-  const cascaraPorMaceta = 170;    // g
+  const capacidadMolienda = 286.7;
+  const cascaraPorMaceta = 170;
 
   const personas = {
     molienda: Math.max(
@@ -104,7 +116,6 @@ function calcularRequerimientos(
     materiales
   };
 }
-
 
 /* ============================================================
    PANTALLA
@@ -213,6 +224,36 @@ export default function ProduccionScreen() {
   const personasLabels = ["Molienda", "Pesado", "Mezcla", "Moldeado", "Desmol"];
   const materialesLabels = ["Cáscara", "Alginato", "Agua"];
 
+  const alcanza = totalPersonal <= personas;
+  const balancePersonal = personas - totalPersonal;
+
+  const tiempoPorMaceta =
+    macetasRecomendadas > 0
+      ? tiempoMin / macetasRecomendadas
+      : 0;
+
+  const totalMaterial =
+    materialesValues[0] +
+    materialesValues[1] +
+    materialesValues[2];
+
+  const proporcionMateriales = materialesValues.map(v =>
+    totalMaterial > 0 ? (v / totalMaterial) * 100 : 0
+  );
+
+  const macetasConUnaPersonaMas =
+    valido
+      ? calcularMacetasRecomendadas(
+          personas + 1,
+          tiempoMin,
+          moldesParaCalculo
+        )
+      : 0;
+
+  const intensidadProcesos = personasValues.map(v =>
+    totalPersonal > 0 ? v / totalPersonal : 0
+  );
+
   return (
     <ScrollView
       style={styles.container}
@@ -260,78 +301,43 @@ export default function ProduccionScreen() {
         />
       </View>
 
-      {/* EQUIPOS + PERSONAL TOTAL */}
+      {/* KPIS */}
 
       <View style={styles.block}>
 
         <View style={styles.sectionRow}>
-          <MaterialCommunityIcons name="factory" size={18} color="#065f46" />
+          <MaterialCommunityIcons name="factory" size={18} color={COLORS.secondary} />
           <Text style={styles.sectionText}>Equipos y personal</Text>
         </View>
 
         <View style={styles.kpis}>
 
           <Kpi
-            icon={
-              <MaterialCommunityIcons
-                name="cog"
-                size={24}
-                color="#059669"
-                style={{ marginBottom: 4 }}
-              />
-            }
+            icon={<MaterialCommunityIcons name="cog" size={24} color={COLORS.blue} />}
             title="Moledoras"
             value={resultado?.equipos.moledoras ?? 0}
           />
 
           <Kpi
-            icon={
-              <MaterialCommunityIcons
-                name="scale-balance"
-                size={24}
-                color="#059669"
-                style={{ marginBottom: 4 }}
-              />
-            }
+            icon={<MaterialCommunityIcons name="scale-balance" size={24} color={COLORS.blue} />}
             title="Balanzas"
             value={resultado?.equipos.balanzas ?? 0}
           />
 
           <Kpi
-            icon={
-              <FontAwesome5
-                name="cubes"
-                size={22}
-                color="#059669"
-                style={{ marginBottom: 4 }}
-              />
-            }
+            icon={<FontAwesome5 name="cubes" size={22} color={COLORS.blue} />}
             title="Moldes usados"
             value={resultado?.equipos.moldesUsados ?? 0}
           />
 
           <Kpi
-            icon={
-              <Ionicons
-                name="people-circle"
-                size={26}
-                color="#059669"
-                style={{ marginBottom: 4 }}
-              />
-            }
+            icon={<Ionicons name="people-circle" size={26} color={COLORS.blue} />}
             title="Personal total"
             value={totalPersonal}
           />
 
           <Kpi
-            icon={
-              <MaterialCommunityIcons
-                name="flower-pot"
-                size={24}
-                color="#059669"
-                style={{ marginBottom: 4 }}
-              />
-            }
+            icon={<MaterialCommunityIcons name="flower-pot" size={24} color={COLORS.blue} />}
             title="Macetas recomendadas"
             value={macetasRecomendadas}
           />
@@ -339,12 +345,119 @@ export default function ProduccionScreen() {
         </View>
       </View>
 
+      {/* FACTIBILIDAD */}
+
+      <View style={styles.block}>
+        <View style={styles.sectionRow}>
+          <Ionicons
+            name={alcanza ? "checkmark-circle" : "close-circle"}
+            size={18}
+            color={alcanza ? "#16a34a" : "#dc2626"}
+          />
+          <Text style={styles.sectionText}>Estado de factibilidad</Text>
+        </View>
+
+        <Text style={{ fontSize: 16, fontWeight: "800", color: COLORS.secondary }}>
+          {alcanza
+            ? "La producción es viable con el personal disponible"
+            : "No es viable con el personal actual"}
+        </Text>
+      </View>
+
+      {/* BALANCE */}
+
+      <View style={styles.block}>
+        <View style={styles.sectionRow}>
+          <Ionicons name="people-outline" size={18} color={COLORS.secondary} />
+          <Text style={styles.sectionText}>Balance de personal</Text>
+        </View>
+
+        <Text style={{ fontSize: 18, fontWeight: "800", color: COLORS.primary }}>
+          {balancePersonal >= 0
+            ? `Sobran ${balancePersonal} personas`
+            : `Faltan ${Math.abs(balancePersonal)} personas`}
+        </Text>
+      </View>
+
+      {/* RENDIMIENTO */}
+
+      <View style={styles.block}>
+        <View style={styles.sectionRow}>
+          <Ionicons name="time-outline" size={18} color={COLORS.secondary} />
+          <Text style={styles.sectionText}>Rendimiento temporal</Text>
+        </View>
+
+        <Text style={{ fontSize: 18, fontWeight: "900", color: COLORS.blue }}>
+          {tiempoPorMaceta.toFixed(2)} min / maceta
+        </Text>
+      </View>
+
+      {/* PROPORCIÓN */}
+
+      <View style={styles.block}>
+        <View style={styles.sectionRow}>
+          <MaterialCommunityIcons name="chart-pie" size={18} color={COLORS.secondary} />
+          <Text style={styles.sectionText}>Proporción de materiales</Text>
+        </View>
+
+        {materialesLabels.map((l, i) => (
+          <Text key={l} style={{ fontWeight: "700", color: COLORS.secondary }}>
+            {l}: {proporcionMateriales[i].toFixed(1)} %
+          </Text>
+        ))}
+      </View>
+
+      {/* +1 PERSONA */}
+
+      <View style={styles.block}>
+        <View style={styles.sectionRow}>
+          <Ionicons name="add-circle-outline" size={18} color={COLORS.secondary} />
+          <Text style={styles.sectionText}>Escenario +1 persona</Text>
+        </View>
+
+        <Text style={{ fontSize: 18, fontWeight: "900", color: COLORS.primary }}>
+          {macetasConUnaPersonaMas} macetas
+        </Text>
+      </View>
+
+      {/* INTENSIDAD */}
+
+      <View style={styles.block}>
+        <View style={styles.sectionRow}>
+          <Ionicons name="pulse" size={18} color={COLORS.secondary} />
+          <Text style={styles.sectionText}>Intensidad de trabajo</Text>
+        </View>
+
+        {personasLabels.map((l, i) => (
+          <View key={l} style={{ marginBottom: 8 }}>
+            <Text style={{ fontSize: 12, fontWeight: "700", color: COLORS.secondary }}>
+              {l}
+            </Text>
+            <View
+              style={{
+                height: 6,
+                backgroundColor: COLORS.soft,
+                borderRadius: 4
+              }}
+            >
+              <View
+                style={{
+                  width: `${(intensidadProcesos[i] * 100).toFixed(0)}%`,
+                  height: 6,
+                  borderRadius: 4,
+                  backgroundColor: COLORS.accent
+                }}
+              />
+            </View>
+          </View>
+        ))}
+      </View>
+
       {/* ETAPAS */}
 
       <View style={styles.block}>
-
         <View style={styles.sectionRow}>
-          <Ionicons name="list" size={18} color="#065f46" />
+          <Ionicons name="list" size={18} color={COLORS.secondary} />
           <Text style={styles.sectionText}>Etapas del proceso</Text>
         </View>
 
@@ -356,37 +469,28 @@ export default function ProduccionScreen() {
             <Text style={styles.stepText}>{etapa}</Text>
           </View>
         ))}
-
       </View>
 
       {/* PERSONAL */}
 
       <View style={styles.block}>
-
         <View style={styles.sectionRow}>
-          <Ionicons name="people" size={18} color="#065f46" />
+          <Ionicons name="people" size={18} color={COLORS.secondary} />
           <Text style={styles.sectionText}>Personal por proceso</Text>
         </View>
 
-        <VerticalBarChart
-          labels={personasLabels}
-          values={personasValues}
-        />
+        <VerticalBarChart labels={personasLabels} values={personasValues} />
       </View>
 
       {/* MATERIALES */}
 
       <View style={styles.block}>
-
         <View style={styles.sectionRow}>
-          <MaterialCommunityIcons name="flask" size={18} color="#065f46" />
+          <MaterialCommunityIcons name="flask" size={18} color={COLORS.secondary} />
           <Text style={styles.sectionText}>Material requerido (g)</Text>
         </View>
 
-        <HorizontalBarChart
-          labels={materialesLabels}
-          values={materialesValues}
-        />
+        <HorizontalBarChart labels={materialesLabels} values={materialesValues} />
       </View>
 
     </ScrollView>
@@ -395,15 +499,7 @@ export default function ProduccionScreen() {
 
 /* ---------------- KPI ---------------- */
 
-function Kpi({
-  icon,
-  title,
-  value
-}: {
-  icon: ReactNode;
-  title: string;
-  value: number;
-}) {
+function Kpi({ icon, title, value }: { icon: ReactNode; title: string; value: number }) {
   return (
     <View style={styles.kpiCard}>
       {icon}
@@ -413,19 +509,12 @@ function Kpi({
   );
 }
 
-/* ---------------- PERSONAL ---------------- */
+/* ---------------- GRÁFICOS ---------------- */
 
-function VerticalBarChart({
-  labels,
-  values
-}: {
-  labels: string[];
-  values: number[];
-}) {
+function VerticalBarChart({ labels, values }: { labels: string[]; values: number[] }) {
 
   const width = 320;
   const height = 190;
-
   const chartBottom = 145;
   const chartTop = 20;
   const chartHeight = chartBottom - chartTop;
@@ -434,29 +523,17 @@ function VerticalBarChart({
   const barWidth = 34;
   const gap = 22;
 
-  const totalWidth =
-    values.length * barWidth +
-    (values.length - 1) * gap;
-
+  const totalWidth = values.length * barWidth + (values.length - 1) * gap;
   const startX = (width - totalWidth) / 2;
 
   return (
     <View style={{ alignItems: "center" }}>
-
       <Svg width={width} height={height}>
 
         {[...Array(4)].map((_, i) => {
           const y = chartTop + (chartHeight / 3) * i;
           return (
-            <Line
-              key={`grid-${i}`}
-              x1={0}
-              x2={width}
-              y1={y}
-              y2={y}
-              stroke="#bbf7d0"
-              strokeWidth={1}
-            />
+            <Line key={i} x1={0} x2={width} y1={y} y2={y} stroke={COLORS.grid} />
           );
         })}
 
@@ -467,67 +544,24 @@ function VerticalBarChart({
           const y = chartBottom - h;
 
           return (
-            <Fragment key={`bar-${i}`}>
-
-              <Rect
-                x={x}
-                y={y + 4}
-                width={barWidth}
-                height={h}
-                rx={10}
-                fill="#000"
-                opacity={0.06}
-              />
-
-              <Rect
-                x={x}
-                y={y}
-                width={barWidth}
-                height={h}
-                rx={10}
-                fill="#10b981"
-              />
-
-              <SvgText
-                x={x + barWidth / 2}
-                y={y - 6}
-                fontSize="11"
-                fill="#065f46"
-                fontWeight="700"
-                textAnchor="middle"
-              >
+            <Fragment key={i}>
+              <Rect x={x} y={y} width={barWidth} height={h} rx={10} fill={COLORS.accent} />
+              <SvgText x={x + barWidth / 2} y={y - 6} fontSize="11" fill={COLORS.primary} textAnchor="middle">
                 {v}
               </SvgText>
-
-              <SvgText
-                x={x + barWidth / 2}
-                y={chartBottom + 16}
-                fontSize="11"
-                fill="#374151"
-                textAnchor="middle"
-              >
+              <SvgText x={x + barWidth / 2} y={chartBottom + 16} fontSize="11" fill={COLORS.secondary} textAnchor="middle">
                 {labels[i]}
               </SvgText>
-
             </Fragment>
           );
         })}
 
       </Svg>
-
     </View>
   );
 }
 
-/* ---------------- MATERIALES ---------------- */
-
-function HorizontalBarChart({
-  labels,
-  values
-}: {
-  labels: string[];
-  values: number[];
-}) {
+function HorizontalBarChart({ labels, values }: { labels: string[]; values: number[] }) {
 
   const width = 320;
   const rowHeight = 34;
@@ -540,7 +574,6 @@ function HorizontalBarChart({
 
   return (
     <View style={{ alignItems: "center" }}>
-
       <Svg width={width} height={height}>
 
         {values.map((v, i) => {
@@ -549,44 +582,23 @@ function HorizontalBarChart({
           const y = i * (rowHeight + gap);
 
           return (
-            <Fragment key={`hbar-${i}`}>
-
-              <SvgText
-                x={leftLabel - 8}
-                y={y + 22}
-                fontSize="12"
-                fill="#065f46"
-                textAnchor="end"
-                fontWeight="600"
-              >
+            <Fragment key={i}>
+              <SvgText x={leftLabel - 8} y={y + 22} fontSize="12" fill={COLORS.secondary} textAnchor="end">
                 {labels[i]}
               </SvgText>
 
-              <Rect
-                x={leftLabel}
-                y={y + 4}
-                width={barWidth}
-                height={20}
-                rx={10}
-                fill="#10b981"
-              />
+              <Rect x={leftLabel} y={y + 4} width={barMaxWidth} height={20} rx={10} fill={COLORS.soft} />
 
-              <SvgText
-                x={leftLabel + barWidth + 6}
-                y={y + 20}
-                fontSize="11"
-                fill="#065f46"
-                fontWeight="700"
-              >
+              <Rect x={leftLabel} y={y + 4} width={barWidth} height={20} rx={10} fill={COLORS.blue} />
+
+              <SvgText x={leftLabel + barWidth + 6} y={y + 20} fontSize="11" fill={COLORS.primary}>
                 {Math.round(v)} g
               </SvgText>
-
             </Fragment>
           );
         })}
 
       </Svg>
-
     </View>
   );
 }
@@ -597,15 +609,15 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.bg,
     padding: 16
   },
 
   title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#064e3b",
-    marginBottom: 14
+    fontSize: 24,
+    fontWeight: "900",
+    color: COLORS.primary,
+    marginBottom: 16
   },
 
   rowInputs: {
@@ -615,36 +627,36 @@ const styles = StyleSheet.create({
 
   card: {
     flex: 1,
-    backgroundColor: "#f9fafb",
-    borderRadius: 14,
-    padding: 12,
+    backgroundColor: COLORS.card,
+    borderRadius: 18,
+    padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#d1fae5"
+    borderColor: COLORS.border
   },
 
   label: {
-    color: "#065f46",
+    color: COLORS.primary,
     marginBottom: 6,
-    fontWeight: "600"
+    fontWeight: "800"
   },
 
   input: {
     borderWidth: 1,
-    borderColor: "#a7f3d0",
-    borderRadius: 10,
+    borderColor: "#fdba74",
+    borderRadius: 12,
     padding: 10,
-    color: "#064e3b",
-    backgroundColor: "#ffffff"
+    color: COLORS.secondary,
+    backgroundColor: COLORS.bg
   },
 
   block: {
-    marginTop: 18,
-    backgroundColor: "#ecfdf5",
-    padding: 14,
-    borderRadius: 18,
+    marginTop: 20,
+    backgroundColor: COLORS.card,
+    padding: 16,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#10b981"
+    borderColor: "#fde68a"
   },
 
   sectionRow: {
@@ -654,10 +666,10 @@ const styles = StyleSheet.create({
   },
 
   sectionText: {
-    marginLeft: 6,
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#065f46"
+    marginLeft: 8,
+    fontSize: 17,
+    fontWeight: "900",
+    color: COLORS.secondary
   },
 
   kpis: {
@@ -668,54 +680,55 @@ const styles = StyleSheet.create({
 
   kpiCard: {
     width: "48%",
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    paddingVertical: 14,
+    backgroundColor: COLORS.bg,
+    borderRadius: 18,
+    paddingVertical: 16,
     marginBottom: 10,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#a7f3d0"
+    borderColor: COLORS.border
   },
 
   kpiValue: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#047857"
+    fontSize: 24,
+    fontWeight: "900",
+    color: COLORS.blue
   },
 
   kpiLabel: {
     fontSize: 12,
-    color: "#374151",
-    marginTop: 2,
-    textAlign: "center"
+    color: COLORS.secondary,
+    marginTop: 4,
+    textAlign: "center",
+    fontWeight: "700"
   },
 
   stepRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8
+    marginBottom: 10
   },
 
   stepBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#10b981",
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.accent,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 8
+    marginRight: 10
   },
 
   stepNumber: {
     color: "#ffffff",
     fontSize: 12,
-    fontWeight: "700"
+    fontWeight: "900"
   },
 
   stepText: {
-    color: "#064e3b",
+    color: COLORS.secondary,
     fontSize: 14,
-    fontWeight: "600"
+    fontWeight: "700"
   }
 
 });

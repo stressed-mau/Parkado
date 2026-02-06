@@ -78,27 +78,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* BLOQUE ACCESO */}
-      <View style={styles.block}>
-        <View style={styles.sectionRow}>
-          <MaterialCommunityIcons
-            name="rocket-launch"
-            size={18}
-            color="#065f46"
-            
-          />
-          <Text style={styles.sectionText}>Ir al simulador</Text>
-        </View>
-
-        <Link href="/produccion">
-          <View style={styles.linkCard}>
-            <Ionicons name="play" size={20} color="#047857" />
-            <Text style={styles.linkText}>
-              Abrir calculadora de producción
-            </Text>
-          </View>
-        </Link>
-      </View>
+       
 
       {/* LOGO AL FINAL */}
 <View style={styles.footerLogo}>

@@ -15,21 +15,122 @@ import {
   FontAwesome5
 } from "@expo/vector-icons";
 
-import { calcularRequerimientos } from "../../components/lib/modeloProduccion";
+/* ============================================================
+   MODELO (antes estaba en ../../components/lib/modeloProduccion)
+   ============================================================ */
+
+type Resultado = {
+  personas: {
+    molienda: number;
+    pesado: number;
+    mezclado: number;
+    moldes: number;
+    desmolde: number;
+  };
+  equipos: {
+    moledoras: number;
+    balanzas: number;
+    moldesUsados: number;
+    moldesSugeridos: number;
+  };
+  materiales: {
+    cascara: number;
+    alginato: number;
+    agua: number;
+  };
+};
+
+/*
+  Modelo simple y coherente con tu UI.
+  Todas las fórmulas se pueden ajustar luego
+  sin tocar la pantalla.
+*/
+function calcularRequerimientos(
+  macetas: number,
+  tiempoMin: number,
+  moldesDisponibles?: number
+) {
+
+  const r = macetas / tiempoMin; // macetas por minuto
+
+  // ---- tiempos estándar (min/maceta) - informe
+  const tPes = 1.0;
+  const tMez = 3.083;
+  const tAce = 0.3;
+  const tDes = 0.7;
+
+  // ---- molienda por capacidad (g/min)
+  const capacidadMolienda = 286.7; // g/min por persona
+  const cascaraPorMaceta = 170;    // g
+
+  const personas = {
+    molienda: Math.max(
+      1,
+      Math.ceil((r * cascaraPorMaceta) / capacidadMolienda)
+    ),
+    pesado: Math.max(1, Math.ceil(r * tPes)),
+    mezclado: Math.max(1, Math.ceil(r * tMez)),
+    moldes: Math.max(1, Math.ceil(r * tAce)),
+    desmolde: Math.max(1, Math.ceil(r * tDes))
+  };
+
+  const moledoras = personas.molienda;
+  const balanzas = personas.pesado;
+
+  const moldesSugeridos = Math.max(
+    1,
+    Math.ceil(r * tAce * tiempoMin)
+  );
+
+  const moldesUsados =
+    typeof moldesDisponibles === "number" && !isNaN(moldesDisponibles)
+      ? Math.min(moldesDisponibles, moldesSugeridos)
+      : moldesSugeridos;
+
+  const materiales = {
+    cascara: macetas * 170,
+    alginato: macetas * 18,
+    agua: macetas * 150
+  };
+
+  return {
+    personas,
+    equipos: {
+      moledoras,
+      balanzas,
+      moldesUsados,
+      moldesSugeridos
+    },
+    materiales
+  };
+}
+
+
+/* ============================================================
+   PANTALLA
+   ============================================================ */
+
+const ETAPAS = [
+  "Molienda",
+  "Pesado",
+  "Mezclado",
+  "Moldeado",
+  "Desmolde"
+];
 
 export default function ProduccionScreen() {
 
-  const [macetas, setMacetas] = useState("50");
+  const [personasDisponibles, setPersonasDisponibles] = useState("6");
   const [tiempo, setTiempo] = useState("140");
   const [moldesManual, setMoldesManual] = useState("3");
 
-  const objetivo = Number(macetas);
+  const personas = Number(personasDisponibles);
   const tiempoMin = Number(tiempo);
 
   const valido =
-    objetivo > 0 &&
+    personas > 0 &&
     tiempoMin > 0 &&
-    !isNaN(objetivo) &&
+    !isNaN(personas) &&
     !isNaN(tiempoMin);
 
   const moldesParaCalculo =
@@ -37,9 +138,57 @@ export default function ProduccionScreen() {
       ? undefined
       : Number(moldesManual);
 
-  const resultado = valido
-    ? calcularRequerimientos(objetivo, tiempoMin, moldesParaCalculo)
-    : null;
+  function calcularMacetasRecomendadas(
+    personasDisponibles: number,
+    tiempoMin: number,
+    moldes?: number
+  ) {
+
+    if (personasDisponibles <= 0 || tiempoMin <= 0) return 0;
+
+    let low = 1;
+    let high = 10000;
+    let best = 0;
+
+    while (low <= high) {
+
+      const mid = Math.floor((low + high) / 2);
+      const r = calcularRequerimientos(mid, tiempoMin, moldes);
+
+      const total =
+        r.personas.molienda +
+        r.personas.pesado +
+        r.personas.mezclado +
+        r.personas.moldes +
+        r.personas.desmolde;
+
+      if (total <= personasDisponibles) {
+        best = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    return best;
+  }
+
+  const macetasRecomendadas = valido
+    ? calcularMacetasRecomendadas(
+        personas,
+        tiempoMin,
+        moldesParaCalculo
+      )
+    : 0;
+
+  const resultado =
+    valido && macetasRecomendadas > 0
+      ? calcularRequerimientos(
+          macetasRecomendadas,
+          tiempoMin,
+          moldesParaCalculo
+        )
+      : null;
 
   const personasValues = resultado
     ? [
@@ -51,6 +200,8 @@ export default function ProduccionScreen() {
       ]
     : [0, 0, 0, 0, 0];
 
+  const totalPersonal = personasValues.reduce((a, b) => a + b, 0);
+
   const materialesValues = resultado
     ? [
         resultado.materiales.cascara,
@@ -59,7 +210,7 @@ export default function ProduccionScreen() {
       ]
     : [0, 0, 0];
 
-  const personasLabels = ["Mol", "Pes", "Mez", "Mol", "Des"];
+  const personasLabels = ["Molienda", "Pesado", "Mezcla", "Moldeado", "Desmol"];
   const materialesLabels = ["Cáscara", "Alginato", "Agua"];
 
   return (
@@ -75,10 +226,10 @@ export default function ProduccionScreen() {
       <View style={styles.rowInputs}>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Macetas</Text>
+          <Text style={styles.label}>Personas disponibles</Text>
           <TextInput
-            value={macetas}
-            onChangeText={setMacetas}
+            value={personasDisponibles}
+            onChangeText={setPersonasDisponibles}
             keyboardType="numeric"
             style={styles.input}
           />
@@ -109,28 +260,13 @@ export default function ProduccionScreen() {
         />
       </View>
 
-      {/* PERSONAL */}
-
-      <View style={styles.block}>
-
-        <View style={styles.sectionRow}>
-          <Ionicons name="people" size={18} color="#065f46" />
-          <Text style={styles.sectionText}>Personal por proceso</Text>
-        </View>
-
-        <VerticalBarChart
-          labels={personasLabels}
-          values={personasValues}
-        />
-      </View>
-
-      {/* EQUIPOS */}
+      {/* EQUIPOS + PERSONAL TOTAL */}
 
       <View style={styles.block}>
 
         <View style={styles.sectionRow}>
           <MaterialCommunityIcons name="factory" size={18} color="#065f46" />
-          <Text style={styles.sectionText}>Equipos</Text>
+          <Text style={styles.sectionText}>Equipos y personal</Text>
         </View>
 
         <View style={styles.kpis}>
@@ -174,7 +310,68 @@ export default function ProduccionScreen() {
             value={resultado?.equipos.moldesUsados ?? 0}
           />
 
+          <Kpi
+            icon={
+              <Ionicons
+                name="people-circle"
+                size={26}
+                color="#059669"
+                style={{ marginBottom: 4 }}
+              />
+            }
+            title="Personal total"
+            value={totalPersonal}
+          />
+
+          <Kpi
+            icon={
+              <MaterialCommunityIcons
+                name="flower-pot"
+                size={24}
+                color="#059669"
+                style={{ marginBottom: 4 }}
+              />
+            }
+            title="Macetas recomendadas"
+            value={macetasRecomendadas}
+          />
+
         </View>
+      </View>
+
+      {/* ETAPAS */}
+
+      <View style={styles.block}>
+
+        <View style={styles.sectionRow}>
+          <Ionicons name="list" size={18} color="#065f46" />
+          <Text style={styles.sectionText}>Etapas del proceso</Text>
+        </View>
+
+        {ETAPAS.map((etapa, i) => (
+          <View key={etapa} style={styles.stepRow}>
+            <View style={styles.stepBadge}>
+              <Text style={styles.stepNumber}>{i + 1}</Text>
+            </View>
+            <Text style={styles.stepText}>{etapa}</Text>
+          </View>
+        ))}
+
+      </View>
+
+      {/* PERSONAL */}
+
+      <View style={styles.block}>
+
+        <View style={styles.sectionRow}>
+          <Ionicons name="people" size={18} color="#065f46" />
+          <Text style={styles.sectionText}>Personal por proceso</Text>
+        </View>
+
+        <VerticalBarChart
+          labels={personasLabels}
+          values={personasValues}
+        />
       </View>
 
       {/* MATERIALES */}
@@ -465,15 +662,16 @@ const styles = StyleSheet.create({
 
   kpis: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between"
   },
 
   kpiCard: {
-    flex: 1,
+    width: "48%",
     backgroundColor: "#ffffff",
     borderRadius: 16,
     paddingVertical: 14,
-    marginHorizontal: 4,
+    marginBottom: 10,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#a7f3d0"
@@ -490,6 +688,34 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginTop: 2,
     textAlign: "center"
+  },
+
+  stepRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8
+  },
+
+  stepBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#10b981",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8
+  },
+
+  stepNumber: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700"
+  },
+
+  stepText: {
+    color: "#064e3b",
+    fontSize: 14,
+    fontWeight: "600"
   }
 
 });

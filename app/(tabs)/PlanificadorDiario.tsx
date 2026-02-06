@@ -15,6 +15,38 @@ import {
 } from "@expo/vector-icons";
 
 /* ============================================================
+   PALETA (la misma azul / verde / crema que venimos usando)
+   ============================================================ */
+
+const COLORS = {
+  navy: "#1F3448",
+  blue: "#5E7F99",
+  lightBlue: "#A9C5D1",
+  cream: "#EFE5D2",
+
+  background: "#F5F7F8",
+  card: "#EFE5D2",
+  block: "#EFE5D2",
+  border: "#A9C5D1",
+
+  title: "#1F3448",
+  text: "#243A4A",
+  muted: "#7C8F9A",
+
+  primary: "#1F3448",
+  blueBar: "#5E7F99",
+  blueSoft: "#A9C5D1",
+
+  green: "#5E7F99",
+  yellow: "#A9C5D1",
+  purple: "#5E7F99",
+  orange: "#A9C5D1",
+
+  grid: "#A9C5D1",
+  danger: "#1F3448"
+};
+
+/* ============================================================
    MODELO
    ============================================================ */
 
@@ -327,16 +359,17 @@ export default function ProduccionScreen() {
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <MaterialCommunityIcons name="calendar-clock" size={18} color="#065f46" />
+          <MaterialCommunityIcons name="calendar-clock" size={18} color={COLORS.primary} />
           <Text style={styles.sectionText}>Planificación según el modelo</Text>
         </View>
 
         <View style={styles.kpis}>
-          <Kpi icon={<Ionicons name="people" size={22} color="#059669" />} title="Grupos" value={gruposRecomendados} />
-          <Kpi icon={<MaterialCommunityIcons name="account-group" size={22} color="#059669" />} title="Personas por grupo" value={personasPorGrupo} />
-          <Kpi icon={<MaterialCommunityIcons name="flower-pot" size={22} color="#059669" />} title="Macetas por grupo" value={macetasPorGrupo} />
-          <Kpi icon={<Ionicons name="calendar" size={22} color="#059669" />} title="Macetas totales / día" value={macetasTotalesDia} />
-          <Kpi icon={<Ionicons name="calendar-outline" size={22} color="#059669" />} title="Macetas totales periodo" value={macetasTotalesPeriodo} />
+          <Kpi icon={<Ionicons name="people" size={22} color={COLORS.blueBar} />} title="Grupos" value={gruposRecomendados} />
+          <Kpi icon={<MaterialCommunityIcons name="account-group" size={22} color={COLORS.blueBar} />} title="Personas por grupo" value={personasPorGrupo} />
+          <Kpi icon={<MaterialCommunityIcons name="flower-poppy" size={22} color={COLORS.primary} />
+} title="Macetas por grupo" value={macetasPorGrupo} />
+          <Kpi icon={<Ionicons name="calendar" size={22} color={COLORS.blueBar} />} title="Macetas totales / día" value={macetasTotalesDia} />
+          <Kpi icon={<Ionicons name="calendar-outline" size={22} color={COLORS.blueBar} />} title="Macetas totales periodo" value={macetasTotalesPeriodo} />
         </View>
       </View>
 
@@ -344,7 +377,7 @@ export default function ProduccionScreen() {
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <MaterialCommunityIcons name="chart-timeline-variant" size={18} color="#065f46" />
+          <MaterialCommunityIcons name="chart-timeline-variant" size={18} color={COLORS.primary} />
           <Text style={styles.sectionText}>Carga promedio por proceso</Text>
         </View>
 
@@ -355,7 +388,7 @@ export default function ProduccionScreen() {
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <Ionicons name="people-outline" size={18} color="#065f46" />
+          <Ionicons name="people-outline" size={18} color={COLORS.primary} />
           <Text style={styles.sectionText}>Balance de personal (día)</Text>
         </View>
 
@@ -365,7 +398,7 @@ export default function ProduccionScreen() {
             {
               fontSize: 18,
               fontWeight: "800",
-              color: balancePersonalDia >= 0 ? "#047857" : "#b91c1c"
+              color: COLORS.primary
             }
           ]}
         >
@@ -380,7 +413,7 @@ export default function ProduccionScreen() {
           <Ionicons
             name={cumpleObjetivo ? "checkmark-circle" : "close-circle"}
             size={18}
-            color={cumpleObjetivo ? "#16a34a" : "#dc2626"}
+            color={COLORS.primary}
           />
           <Text style={styles.sectionText}>Cumplimiento del objetivo diario</Text>
         </View>
@@ -391,7 +424,7 @@ export default function ProduccionScreen() {
             {
               fontSize: 18,
               fontWeight: "800",
-              color: cumpleObjetivo ? "#047857" : "#b91c1c"
+              color: COLORS.primary
             }
           ]}
         >
@@ -409,22 +442,18 @@ export default function ProduccionScreen() {
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <MaterialCommunityIcons name="target" size={18} color="#065f46" />
+          <MaterialCommunityIcons name="target" size={18} color={COLORS.primary} />
           <Text style={styles.sectionText}>Indicador visual de producción</Text>
         </View>
 
         <GoalGauge objetivo={objetivoDia} real={macetasTotalesDia} />
-
-        <View style={{ marginTop: 16 }}>
-          <MiniCompareBar objetivo={objetivoDia} real={macetasTotalesDia} />
-        </View>
       </View>
 
       {/* PERSONAS POR PROCESO */}
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <Ionicons name="people-circle" size={18} color="#065f46" />
+          <Ionicons name="people-circle" size={18} color={COLORS.primary} />
           <Text style={styles.sectionText}>Personas por proceso (por grupo)</Text>
         </View>
 
@@ -443,7 +472,7 @@ export default function ProduccionScreen() {
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <MaterialCommunityIcons name="flask" size={18} color="#065f46" />
+          <MaterialCommunityIcons name="flask" size={18} color={COLORS.primary} />
           <Text style={styles.sectionText}>Material por grupo (día)</Text>
         </View>
 
@@ -458,7 +487,7 @@ export default function ProduccionScreen() {
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <MaterialCommunityIcons name="account-hard-hat" size={18} color="#065f46" />
+          <MaterialCommunityIcons name="account-hard-hat" size={18} color={COLORS.primary} />
           <Text style={styles.sectionText}>Material por persona</Text>
         </View>
 
@@ -475,7 +504,7 @@ export default function ProduccionScreen() {
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <Ionicons name="bar-chart" size={18} color="#065f46" />
+          <Ionicons name="bar-chart" size={18} color={COLORS.primary} />
           <Text style={styles.sectionText}>Personal por proceso (día)</Text>
         </View>
 
@@ -484,7 +513,7 @@ export default function ProduccionScreen() {
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <MaterialCommunityIcons name="flask" size={18} color="#065f46" />
+          <MaterialCommunityIcons name="flask" size={18} color={COLORS.primary} />
           <Text style={styles.sectionText}>Material total del día (g)</Text>
         </View>
 
@@ -509,15 +538,9 @@ function Kpi({ icon, title, value }: { icon: ReactNode; title: string; value: nu
   );
 }
 
-/* ================= MEDIDOR CON LEYENDA ================= */
+/* ================= MEDIDOR ================= */
 
-function GoalGauge({
-  objetivo,
-  real
-}: {
-  objetivo: number;
-  real: number;
-}) {
+function GoalGauge({ objetivo, real }: { objetivo: number; real: number }) {
 
   const max = Math.max(objetivo * 1.2, real, 1);
 
@@ -526,29 +549,6 @@ function GoalGauge({
 
   return (
     <View>
-
-      <Text style={{ fontWeight: "700", color: "#065f46", marginBottom: 4 }}>
-        Comparación entre producción real y objetivo del día
-      </Text>
-
-      <Text style={{ fontSize: 12, color: "#065f46", marginBottom: 8 }}>
-        El objetivo es la cantidad de macetas que se planificó producir en el día.
-      </Text>
-
-      {/* Leyenda */}
-      <View style={{ marginBottom: 8 }}>
-
-        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
-          <View style={[styles.legendBox, { backgroundColor: "#10b981" }]} />
-          <Text style={styles.legendText}>Producción real del día</Text>
-        </View>
-
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <View style={[styles.legendBox, { backgroundColor: "#dc2626" }]} />
-          <Text style={styles.legendText}>Objetivo planificado del día</Text>
-        </View>
-
-      </View>
 
       <View style={styles.gaugeBase}>
         <View
@@ -582,28 +582,6 @@ function GoalGauge({
   );
 }
 
-/* ================= MINI COMPARADOR ================= */
-
-function MiniCompareBar({
-  objetivo,
-  real
-}: {
-  objetivo: number;
-  real: number;
-}) {
-
-  const max = Math.max(objetivo, real, 1);
-
-  return (
-    <View>
-
-       
-      </View>
-
-       
-  );
-}
-
 /* =====================================================
    GRÁFICOS
    ===================================================== */
@@ -624,13 +602,21 @@ function VerticalBarChart({ labels, values }: { labels: string[]; values: number
   const totalWidth = values.length * barWidth + (values.length - 1) * gap;
   const startX = (width - totalWidth) / 2;
 
+  const barColors = [
+    COLORS.primary,
+    COLORS.blueBar,
+    COLORS.lightBlue,
+    COLORS.blueBar,
+    COLORS.primary
+  ];
+
   return (
     <View style={{ alignItems: "center" }}>
       <Svg width={width} height={height}>
         {[...Array(4)].map((_, i) => {
           const y = chartTop + (chartHeight / 3) * i;
           return (
-            <Line key={i} x1={0} x2={width} y1={y} y2={y} stroke="#bbf7d0" />
+            <Line key={i} x1={0} x2={width} y1={y} y2={y} stroke={COLORS.grid} />
           );
         })}
 
@@ -641,11 +627,30 @@ function VerticalBarChart({ labels, values }: { labels: string[]; values: number
 
           return (
             <Fragment key={i}>
-              <Rect x={x} y={y} width={barWidth} height={h} rx={10} fill="#10b981" />
-              <SvgText x={x + barWidth / 2} y={y - 6} fontSize="11" fill="#065f46" textAnchor="middle">
+              <Rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={h}
+                rx={10}
+                fill={barColors[i % barColors.length]}
+              />
+              <SvgText
+                x={x + barWidth / 2}
+                y={y - 6}
+                fontSize="11"
+                fill={COLORS.text}
+                textAnchor="middle"
+              >
                 {v}
               </SvgText>
-              <SvgText x={x + barWidth / 2} y={chartBottom + 16} fontSize="11" fill="#374151" textAnchor="middle">
+              <SvgText
+                x={x + barWidth / 2}
+                y={chartBottom + 16}
+                fontSize="11"
+                fill={COLORS.text}
+                textAnchor="middle"
+              >
                 {labels[i]}
               </SvgText>
             </Fragment>
@@ -676,11 +681,40 @@ function HorizontalBarChart({ labels, values }: { labels: string[]; values: numb
 
           return (
             <Fragment key={i}>
-              <SvgText x={leftLabel - 8} y={y + 22} fontSize="12" fill="#065f46" textAnchor="end">
+              <SvgText
+                x={leftLabel - 8}
+                y={y + 22}
+                fontSize="12"
+                fill={COLORS.text}
+                textAnchor="end"
+              >
                 {labels[i]}
               </SvgText>
-              <Rect x={leftLabel} y={y + 4} width={barWidth} height={20} rx={10} fill="#10b981" />
-              <SvgText x={leftLabel + barWidth + 6} y={y + 20} fontSize="11" fill="#065f46">
+
+              <Rect
+                x={leftLabel}
+                y={y + 4}
+                width={barMaxWidth}
+                height={20}
+                rx={10}
+                fill={COLORS.lightBlue}
+              />
+
+              <Rect
+                x={leftLabel}
+                y={y + 4}
+                width={barWidth}
+                height={20}
+                rx={10}
+                fill={COLORS.blueBar}
+              />
+
+              <SvgText
+                x={leftLabel + barWidth + 6}
+                y={y + 20}
+                fontSize="11"
+                fill={COLORS.text}
+              >
                 {Math.round(v)} g
               </SvgText>
             </Fragment>
@@ -700,13 +734,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: "#ffffff"
+    backgroundColor: COLORS.background
   },
 
   title: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#064e3b",
+    color: COLORS.title,
     marginBottom: 14
   },
 
@@ -717,35 +751,36 @@ const styles = StyleSheet.create({
 
   card: {
     flex: 1,
-    backgroundColor: "#f9fafb",
+    backgroundColor: COLORS.card,
     borderRadius: 14,
     padding: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#d1fae5"
+    borderColor: COLORS.border
   },
 
   label: {
-    color: "#065f46",
+    color: COLORS.text,
     fontWeight: "600",
     marginBottom: 6
   },
 
   input: {
     borderWidth: 1,
-    borderColor: "#a7f3d0",
+    borderColor: COLORS.border,
     borderRadius: 10,
     padding: 10,
-    backgroundColor: "#fff"
+    backgroundColor: "#ffffff",
+    color: COLORS.text
   },
 
   block: {
     marginTop: 18,
-    backgroundColor: "#ecfdf5",
+    backgroundColor: COLORS.block,
     padding: 14,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#10b981"
+    borderColor: COLORS.border
   },
 
   sectionRow: {
@@ -758,7 +793,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontSize: 16,
     fontWeight: "700",
-    color: "#065f46"
+    color: COLORS.title
   },
 
   kpis: {
@@ -769,53 +804,39 @@ const styles = StyleSheet.create({
 
   kpiCard: {
     width: "48%",
-    backgroundColor: "#fff",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     paddingVertical: 14,
     marginBottom: 10,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#a7f3d0"
+    borderColor: COLORS.border
   },
 
   kpiValue: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#047857"
+    color: COLORS.primary
   },
 
   kpiLabel: {
     fontSize: 12,
-    color: "#374151",
+    color: COLORS.text,
     marginTop: 2,
     textAlign: "center"
   },
 
   simpleRow: {
     fontSize: 14,
-    color: "#064e3b",
+    color: COLORS.text,
     marginBottom: 6,
     fontWeight: "600"
-  },
-
-  miniBarBg: {
-    width: "100%",
-    height: 10,
-    backgroundColor: "#d1fae5",
-    borderRadius: 6,
-    overflow: "hidden",
-    marginTop: 4
-  },
-
-  miniBarFill: {
-    height: 10,
-    borderRadius: 6
   },
 
   gaugeBase: {
     width: "100%",
     height: 16,
-    backgroundColor: "#d1fae5",
+    backgroundColor: COLORS.lightBlue,
     borderRadius: 10,
     overflow: "hidden",
     position: "relative"
@@ -823,7 +844,7 @@ const styles = StyleSheet.create({
 
   gaugeReal: {
     height: 16,
-    backgroundColor: "#10b981",
+    backgroundColor: COLORS.blueBar,
     borderRadius: 10
   },
 
@@ -832,27 +853,14 @@ const styles = StyleSheet.create({
     top: -4,
     width: 3,
     height: 24,
-    backgroundColor: "#dc2626",
+    backgroundColor: COLORS.primary,
     borderRadius: 2
   },
 
   gaugeText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#065f46"
-  },
-
-  legendBox: {
-    width: 12,
-    height: 12,
-    borderRadius: 3,
-    marginRight: 6
-  },
-
-  legendText: {
-    fontSize: 12,
-    color: "#064e3b",
-    fontWeight: "600"
+    color: COLORS.text
   }
 
 });

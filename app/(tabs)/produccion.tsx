@@ -12,8 +12,6 @@ import Svg, {
   Rect,
   Text as SvgText,
   Line,
-  G,
-  Circle,
   Polygon
 } from "react-native-svg";
 
@@ -26,7 +24,41 @@ import {
 import { calcularRequerimientos } from "../../components/lib/modeloProduccion";
 import { Path } from "react-native-svg";
 
-const PROCESS_COLORS = ["#fb7185", "#60a5fa", "#34d399", "#fbbf24", "#c084fc"];
+/* ===========================
+   PALETA (azul – azul – azul – crema)
+   =========================== */
+
+const COLORS = {
+  navy: "#1F3448",
+  blue: "#5E7F99",
+  lightBlue: "#A9C5D1",
+  cream: "#EFE5D2",
+
+  bg: "#F5F7F8",
+  card: "#EFE5D2",
+  border: "#A9C5D1",
+
+  title: "#1F3448",
+  text: "#243A4A",
+  accent: "#5E7F99"
+};
+
+const PROCESS_COLORS = [
+  COLORS.navy,
+  COLORS.blue,
+  COLORS.lightBlue,
+  "#8FAEC0",
+  "#3E5E73"
+];
+
+const PIE_COLORS = [
+  "#fb7185", // rosado
+  "#60a5fa", // azul
+  "#34d399", // verde
+  "#fbbf24", // amarillo
+  "#c084fc"  // violeta
+];
+
 
 export default function ProduccionScreen() {
 
@@ -134,20 +166,20 @@ export default function ProduccionScreen() {
       <View style={styles.block}>
 
         <View style={styles.sectionRow}>
-          <Ionicons name="speedometer" size={18} color="#7c2d12" />
+          <Ionicons name="speedometer" size={18} color={COLORS.title} />
           <Text style={styles.sectionText}>Indicadores rápidos</Text>
         </View>
 
         <View style={styles.kpis}>
 
           <Kpi
-            icon={<Ionicons name="people" size={22} color="#2563eb" />}
+            icon={<Ionicons name="people" size={22} color={COLORS.accent} />}
             title="Personal total"
             value={totalPersonal}
           />
 
           <Kpi
-            icon={<Ionicons name="trending-up" size={22} color="#2563eb" />}
+            icon={<Ionicons name="trending-up" size={22} color={COLORS.accent} />}
             title="Macetas / persona"
             value={Number(eficiencia.toFixed(2))}
           />
@@ -156,12 +188,12 @@ export default function ProduccionScreen() {
 
       </View>
 
-      {/* BARRAS CREATIVAS */}
+      {/* BARRAS */}
 
       <View style={styles.block}>
 
         <View style={styles.sectionRow}>
-          <Ionicons name="people" size={18} color="#7c2d12" />
+          <Ionicons name="people" size={18} color={COLORS.title} />
           <Text style={styles.sectionText}>Personal por proceso</Text>
         </View>
 
@@ -175,14 +207,14 @@ export default function ProduccionScreen() {
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <Ionicons name="pie-chart" size={18} color="#7c2d12" />
+          <Ionicons name="pie-chart" size={18} color={COLORS.title} />
           <Text style={styles.sectionText}>Distribución de personal</Text>
         </View>
 
         <PieChart
-  values={personasValues}
-  labels={personasLabels}
-/>
+          values={personasValues}
+          labels={personasLabels}
+        />
 
       </View>
 
@@ -190,7 +222,7 @@ export default function ProduccionScreen() {
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <Ionicons name="analytics" size={18} color="#7c2d12" />
+          <Ionicons name="analytics" size={18} color={COLORS.title} />
           <Text style={styles.sectionText}>Perfil de carga (radar)</Text>
         </View>
 
@@ -204,7 +236,7 @@ export default function ProduccionScreen() {
 
       <View style={styles.block}>
         <View style={styles.sectionRow}>
-          <Ionicons name="list" size={18} color="#7c2d12" />
+          <Ionicons name="list" size={18} color={COLORS.title} />
           <Text style={styles.sectionText}>Procesos</Text>
         </View>
 
@@ -220,7 +252,7 @@ export default function ProduccionScreen() {
       <View style={styles.block}>
 
         <View style={styles.sectionRow}>
-          <Ionicons name="alert-circle" size={18} color="#7c2d12" />
+          <Ionicons name="alert-circle" size={18} color={COLORS.title} />
           <Text style={styles.sectionText}>Conclusiones automáticas</Text>
         </View>
 
@@ -245,26 +277,26 @@ export default function ProduccionScreen() {
       <View style={styles.block}>
 
         <View style={styles.sectionRow}>
-          <MaterialCommunityIcons name="factory" size={18} color="#7c2d12" />
+          <MaterialCommunityIcons name="factory" size={18} color={COLORS.title} />
           <Text style={styles.sectionText}>Equipos</Text>
         </View>
 
         <View style={styles.kpis}>
 
           <Kpi
-            icon={<MaterialCommunityIcons name="cog" size={22} color="#2563eb" />}
+            icon={<MaterialCommunityIcons name="cog" size={22} color={COLORS.accent} />}
             title="Moledoras"
             value={resultado?.equipos.moledoras ?? 0}
           />
 
           <Kpi
-            icon={<MaterialCommunityIcons name="scale-balance" size={22} color="#2563eb" />}
+            icon={<MaterialCommunityIcons name="scale-balance" size={22} color={COLORS.accent} />}
             title="Balanzas"
             value={resultado?.equipos.balanzas ?? 0}
           />
 
           <Kpi
-            icon={<FontAwesome5 name="cubes" size={20} color="#2563eb" />}
+            icon={<FontAwesome5 name="cubes" size={20} color={COLORS.accent} />}
             title="Moldes usados"
             value={resultado?.equipos.moldesUsados ?? 0}
           />
@@ -278,7 +310,7 @@ export default function ProduccionScreen() {
       <View style={styles.block}>
 
         <View style={styles.sectionRow}>
-          <MaterialCommunityIcons name="flask" size={18} color="#7c2d12" />
+          <MaterialCommunityIcons name="flask" size={18} color={COLORS.title} />
           <Text style={styles.sectionText}>Material requerido</Text>
         </View>
 
@@ -306,7 +338,7 @@ function Kpi({ icon, title, value }: { icon: ReactNode; title: string; value: nu
 
 /* ---------------- DONUT ---------------- */
 
-function PieChart({ values, labels }: { values: number[]; labels: string[] }) {
+function PieChart({ values }: { values: number[]; labels: string[] }) {
 
   const size = 220;
   const cx = size / 2;
@@ -357,7 +389,8 @@ function PieChart({ values, labels }: { values: number[]; labels: string[] }) {
             <Path
               key={i}
               d={d}
-              fill={PROCESS_COLORS[i % PROCESS_COLORS.length]}
+              fill={PIE_COLORS[i % PIE_COLORS.length]}
+
             />
           );
         })}
@@ -366,7 +399,6 @@ function PieChart({ values, labels }: { values: number[]; labels: string[] }) {
     </View>
   );
 }
-
 
 /* ---------------- RADAR ---------------- */
 
@@ -398,16 +430,16 @@ function RadarChart({ values, labels }: { values: number[]; labels: string[] }) 
               y1={cy}
               x2={cx + radius * Math.cos(a)}
               y2={cy + radius * Math.sin(a)}
-              stroke="#fdba74"
+              stroke={COLORS.lightBlue}
             />
           );
         })}
 
         <Polygon
           points={points}
-          fill="#fb7185"
+          fill={COLORS.blue}
           opacity={0.35}
-          stroke="#9f1239"
+          stroke={COLORS.navy}
           strokeWidth={2}
         />
 
@@ -419,7 +451,7 @@ function RadarChart({ values, labels }: { values: number[]; labels: string[] }) 
               x={cx + (radius + 16) * Math.cos(a)}
               y={cy + (radius + 16) * Math.sin(a)}
               fontSize="11"
-              fill="#7c2d12"
+              fill={COLORS.text}
               textAnchor="middle"
             >
               {l}
@@ -456,7 +488,15 @@ function VerticalBarChart({ labels, values }: { labels: string[]; values: number
         {[0, 1, 2, 3].map((i) => {
           const y = chartTop + (chartHeight / 3) * i;
           return (
-            <Line key={i} x1={18} x2={width - 18} y1={y} y2={y} stroke="#fde68a" strokeDasharray="4 6" />
+            <Line
+              key={i}
+              x1={18}
+              x2={width - 18}
+              y1={y}
+              y2={y}
+              stroke={COLORS.lightBlue}
+              strokeDasharray="4 6"
+            />
           );
         })}
 
@@ -468,12 +508,20 @@ function VerticalBarChart({ labels, values }: { labels: string[]; values: number
 
           return (
             <Fragment key={i}>
-              <Rect x={x} y={chartTop} width={barWidth} height={chartHeight} rx={11} fill="#fff7ed" />
-              <Rect x={x} y={y} width={barWidth} height={h} rx={11} fill={PROCESS_COLORS[i]} />
-              <SvgText x={x + barWidth / 2} y={y - 6} fontSize="11" fill="#7c2d12" fontWeight="800" textAnchor="middle">
+              <Rect x={x} y={chartTop} width={barWidth} height={chartHeight} rx={11} fill={COLORS.cream} />
+              <Rect
+  x={x}
+  y={y}
+  width={barWidth}
+  height={h}
+  rx={11}
+  fill={PIE_COLORS[i % PIE_COLORS.length]}
+/>
+
+              <SvgText x={x + barWidth / 2} y={y - 6} fontSize="11" fill={COLORS.text} fontWeight="800" textAnchor="middle">
                 {v}
               </SvgText>
-              <SvgText x={x + barWidth / 2} y={chartBottom + 20} fontSize="11" fill="#7c2d12" textAnchor="middle">
+              <SvgText x={x + barWidth / 2} y={chartBottom + 20} fontSize="11" fill={COLORS.text} textAnchor="middle">
                 {labels[i]}
               </SvgText>
             </Fragment>
@@ -507,14 +555,14 @@ function HorizontalBarChart({ labels, values }: { labels: string[]; values: numb
 
           return (
             <Fragment key={i}>
-              <SvgText x={leftLabel - 10} y={y + 19} fontSize="12" fill="#7c2d12" textAnchor="end" fontWeight="700">
+              <SvgText x={leftLabel - 10} y={y + 19} fontSize="12" fill={COLORS.text} textAnchor="end" fontWeight="700">
                 {labels[i]}
               </SvgText>
 
-              <Rect x={leftLabel} y={y + 6} width={barMaxWidth} height={14} rx={8} fill="#ffedd5" />
-              <Rect x={leftLabel} y={y + 6} width={barWidth} height={14} rx={8} fill="#60a5fa" />
+              <Rect x={leftLabel} y={y + 6} width={barMaxWidth} height={14} rx={8} fill={COLORS.cream} />
+              <Rect x={leftLabel} y={y + 6} width={barWidth} height={14} rx={8} fill={COLORS.blue} />
 
-              <SvgText x={leftLabel + barWidth + 8} y={y + 18} fontSize="11" fill="#1e3a8a" fontWeight="800">
+              <SvgText x={leftLabel + barWidth + 8} y={y + 18} fontSize="11" fill={COLORS.navy} fontWeight="800">
                 {Math.round(v)} g
               </SvgText>
             </Fragment>
@@ -531,14 +579,14 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: "#fff7ed",
+    backgroundColor: COLORS.bg,
     padding: 16
   },
 
   title: {
     fontSize: 24,
     fontWeight: "900",
-    color: "#9f1239",
+    color: COLORS.title,
     marginBottom: 16
   },
 
@@ -549,36 +597,36 @@ const styles = StyleSheet.create({
 
   card: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.card,
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#fed7aa"
+    borderColor: COLORS.border
   },
 
   label: {
-    color: "#9f1239",
+    color: COLORS.title,
     marginBottom: 6,
     fontWeight: "800"
   },
 
   input: {
     borderWidth: 1,
-    borderColor: "#fdba74",
+    borderColor: COLORS.border,
     borderRadius: 12,
     padding: 10,
-    color: "#7c2d12",
-    backgroundColor: "#fff7ed"
+    color: COLORS.text,
+    backgroundColor: "#ffffff"
   },
 
   block: {
     marginTop: 20,
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.card,
     padding: 16,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#fde68a"
+    borderColor: COLORS.border
   },
 
   sectionRow: {
@@ -591,7 +639,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 17,
     fontWeight: "900",
-    color: "#7c2d12"
+    color: COLORS.title
   },
 
   kpis: {
@@ -601,24 +649,24 @@ const styles = StyleSheet.create({
 
   kpiCard: {
     flex: 1,
-    backgroundColor: "#fff7ed",
+    backgroundColor: "#ffffff",
     borderRadius: 18,
     paddingVertical: 16,
     marginHorizontal: 4,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#fed7aa"
+    borderColor: COLORS.border
   },
 
   kpiValue: {
     fontSize: 24,
     fontWeight: "900",
-    color: "#2563eb"
+    color: COLORS.navy
   },
 
   kpiLabel: {
     fontSize: 12,
-    color: "#7c2d12",
+    color: COLORS.text,
     marginTop: 4,
     textAlign: "center",
     fontWeight: "700"
@@ -626,7 +674,7 @@ const styles = StyleSheet.create({
 
   simpleRow: {
     fontSize: 14,
-    color: "#7c2d12",
+    color: COLORS.text,
     marginBottom: 6,
     fontWeight: "700"
   }
